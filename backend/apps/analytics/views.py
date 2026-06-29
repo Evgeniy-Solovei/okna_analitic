@@ -99,6 +99,8 @@ def _url_with(filters, **overrides):
         params["manager"] = filters["manager_ids"]
     if filters["direction_ids"]:
         params["direction"] = filters["direction_ids"]
+    if filters.get("detail"):
+        params["detail"] = filters["detail"]
 
     for key, value in overrides.items():
         if value in (None, "", []):
@@ -115,6 +117,7 @@ def _metric_queryset(request):
     selected_date = _parse_date_param(request.GET.get("date"))
     manager_ids = _ids_from_request(request, "manager")
     direction_ids = _ids_from_request(request, "direction")
+    detail = request.GET.get("detail") or ""
 
     if selected_date:
         qs = qs.filter(metric_date=selected_date)
@@ -137,6 +140,7 @@ def _metric_queryset(request):
         "selected_date": selected_date,
         "manager_ids": manager_ids,
         "direction_ids": direction_ids,
+        "detail": detail,
     }
 
 
@@ -185,6 +189,21 @@ def _dashboard_context(request):
     conversion_rows = sorted(manager_rows, key=lambda item: item["conversion"], reverse=True)
     conversion_rows = _bar_rows(conversion_rows, "conversion")
     amount_rows = _bar_rows(manager_rows.copy(), "contract_amount")
+
+    direction_rows = list(
+        qs.values("direction_id", "direction__name")
+        .annotate(
+            leads=Sum("leads"),
+            target_leads=Sum("target_leads"),
+            zz=Sum("zz"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        .order_by("direction__name")
+    )
+    for row in direction_rows:
+        row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
+        row["url"] = _url_with(filters, direction=[row["direction_id"]])
 
     daily_rows = list(
         qs.values("metric_date")
@@ -235,7 +254,8 @@ def _dashboard_context(request):
             contract_detail_filters &= Q(contract_date__lte=filters["date_to"])
             first_zz_filters &= Q(first_zz_at__date__lte=filters["date_to"])
 
-    details_enabled = bool(filters["manager_ids"] or filters["selected_date"])
+    detail = filters["detail"]
+    details_enabled = bool(filters["manager_ids"] or filters["selected_date"] or detail)
     details = {}
     if details_enabled:
         details = {
@@ -244,6 +264,32 @@ def _dashboard_context(request):
             "zz": DealFirstZZ.objects.select_related("deal", "assigned_by", "stage", "deal__assigned_by", "deal__direction").filter(first_zz_filters).order_by("-first_zz_at")[:50],
             "contracts": CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(contract_detail_filters, contract_date__isnull=False).order_by("-contract_date")[:50],
         }
+
+    show_details = {
+        "leads": detail in {"", "leads"},
+        "target_leads": detail in {"", "target_leads", "conversion"},
+        "zz": detail in {"", "zz", "conversion"},
+        "contracts": detail in {"", "contracts", "avg_check", "contract_amount"},
+    }
+    detail_title = {
+        "leads": "Лиды",
+        "target_leads": "Целевые лиды",
+        "zz": "ЗЗ",
+        "conversion": "Конверсия",
+        "contracts": "Договоры",
+        "avg_check": "Средний чек",
+        "contract_amount": "Сумма договоров",
+    }.get(detail, "Детализация")
+
+    kpi_urls = {
+        "leads": _url_with(filters, detail="leads"),
+        "target_leads": _url_with(filters, detail="target_leads"),
+        "zz": _url_with(filters, detail="zz"),
+        "conversion": _url_with(filters, detail="conversion"),
+        "contracts": _url_with(filters, detail="contracts"),
+        "avg_check": _url_with(filters, detail="avg_check"),
+        "contract_amount": _url_with(filters, detail="contract_amount"),
+    }
 
     chart_data = {
         "daily": [
@@ -290,9 +336,13 @@ def _dashboard_context(request):
         "selected_direction_title": selected_direction_title,
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
+        "direction_rows": direction_rows,
         "daily_rows": daily_rows,
         "chart_data": chart_data,
+        "kpi_urls": kpi_urls,
         "details_enabled": details_enabled,
+        "detail_title": detail_title,
+        "show_details": show_details,
         "details": details,
     }
 

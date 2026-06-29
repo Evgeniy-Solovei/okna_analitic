@@ -11,11 +11,21 @@
       --text: #172033;
       --muted: #667085;
       --line: #d9e2ef;
+      --soft: #f0f5ff;
       --blue: #2f80ed;
       --green: #65a30d;
       --orange: #e58a2a;
       --red: #d76b72;
       --violet: #7168b8;
+    }
+
+    body[data-theme="dark"] {
+      --bg: #07111c;
+      --panel: #0d1a27;
+      --text: #edf4ff;
+      --muted: #9fb0c5;
+      --line: #213346;
+      --soft: #13283d;
     }
 
     * { box-sizing: border-box; }
@@ -71,6 +81,15 @@
       font: inherit;
       cursor: pointer;
       white-space: nowrap;
+    }
+
+    body[data-theme="dark"] .button,
+    body[data-theme="dark"] input,
+    body[data-theme="dark"] select,
+    body[data-theme="dark"] .multi-select summary,
+    body[data-theme="dark"] .multi-menu {
+      background: #0f2030;
+      color: var(--text);
     }
 
     .button.primary {
@@ -179,7 +198,7 @@
     }
 
     .check-row:hover {
-      background: #f0f5ff;
+      background: var(--soft);
     }
 
     .check-row input {
@@ -205,6 +224,13 @@
     .kpi {
       padding: 14px;
       min-height: 92px;
+      display: block;
+      transition: border-color .15s ease, transform .15s ease;
+    }
+
+    .kpi:hover {
+      border-color: var(--blue);
+      transform: translateY(-1px);
     }
 
     .kpi-label {
@@ -259,7 +285,7 @@
     }
 
     .bar-row:hover {
-      background: #f0f5ff;
+      background: var(--soft);
     }
 
     .name {
@@ -315,7 +341,7 @@
     }
 
     .day:hover {
-      background: #f0f5ff;
+      background: var(--soft);
     }
 
     .day-bar {
@@ -405,6 +431,19 @@
       vertical-align: top;
     }
 
+    .metric-table td:not(:first-child),
+    .metric-table th:not(:first-child) {
+      text-align: right;
+    }
+
+    .metric-table tbody tr {
+      cursor: pointer;
+    }
+
+    .metric-table tbody tr:hover {
+      background: var(--soft);
+    }
+
     th {
       color: var(--muted);
       font-size: 12px;
@@ -466,7 +505,8 @@
     </div>
     <nav class="actions" aria-label="Действия">
       <a class="button primary" href="/?force=1">Обновить данные</a>
-      <a class="button" href="/metabase" target="_blank" rel="noreferrer">Metabase</a>
+      <button class="button" type="button" id="themeToggle">Тема</button>
+      <a class="button" href="https://platform.oknapanorama.by/dashboard/2" target="_blank" rel="noreferrer">Metabase</a>
       <form class="logout-form" method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <button class="button" type="submit">Выйти</button>
@@ -520,13 +560,13 @@
     </form>
 
     <section class="kpis" aria-label="Показатели">
-      <article class="kpi"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></article>
-      <article class="kpi"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></article>
-      <article class="kpi"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></article>
-      <article class="kpi"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></article>
-      <article class="kpi"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></article>
-      <article class="kpi"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></article>
-      <article class="kpi"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></article>
+      <a class="kpi" href="{{ kpi_urls.leads }}"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></a>
+      <a class="kpi" href="{{ kpi_urls.target_leads }}"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></a>
+      <a class="kpi" href="{{ kpi_urls.zz }}"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></a>
+      <a class="kpi" href="{{ kpi_urls.conversion }}"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></a>
+      <a class="kpi" href="{{ kpi_urls.contracts }}"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></a>
+      <a class="kpi" href="{{ kpi_urls.avg_check }}"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></a>
+      <a class="kpi" href="{{ kpi_urls.contract_amount }}"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></a>
     </section>
 
     <section class="grid">
@@ -569,10 +609,44 @@
       </article>
     </section>
 
+    <section class="grid">
+      <article class="card wide">
+        <h2>Направления</h2>
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th>Направление</th>
+              <th>Лиды</th>
+              <th>ЦЛ</th>
+              <th>ЗЗ</th>
+              <th>Конверсия, %</th>
+              <th>Договоры</th>
+              <th>Сумма договоров</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in direction_rows %}
+              <tr onclick="window.location.href='{{ row.url }}'">
+                <td><strong>{{ row.direction__name }}</strong></td>
+                <td>{{ row.leads }}</td>
+                <td>{{ row.target_leads }}</td>
+                <td>{{ row.zz }}</td>
+                <td>{{ row.conversion }}</td>
+                <td>{{ row.contracts }}</td>
+                <td>{{ row.contract_amount }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="7" class="empty">Нет данных по направлениям.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+    </section>
+
     {% if details_enabled %}
       <section class="details-title">
         <h2>
-          Детализация
+          {{ detail_title }}
           {% if selected_managers %}:
             {% for manager in selected_managers %}{{ manager.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
           {% endif %}
@@ -582,6 +656,7 @@
       </section>
 
       <section class="grid">
+        {% if show_details.leads %}
         <article class="card wide">
           <h2>Лиды</h2>
           <table>
@@ -595,9 +670,11 @@
             </tbody>
           </table>
         </article>
+        {% endif %}
 
+        {% if show_details.target_leads %}
         <article class="card wide">
-          <h2>Сделки</h2>
+          <h2>Целевые лиды / сделки</h2>
           <table>
             <thead><tr><th>ID</th><th>Дата</th><th>Название</th><th>Менеджер</th><th>Направление</th><th>Этап</th></tr></thead>
             <tbody>
@@ -609,7 +686,9 @@
             </tbody>
           </table>
         </article>
+        {% endif %}
 
+        {% if show_details.zz %}
         <article class="card">
           <h2>ЗЗ</h2>
           <table>
@@ -623,7 +702,9 @@
             </tbody>
           </table>
         </article>
+        {% endif %}
 
+        {% if show_details.contracts %}
         <article class="card">
           <h2>Договоры</h2>
           <table>
@@ -637,23 +718,37 @@
             </tbody>
           </table>
         </article>
+        {% endif %}
       </section>
     {% endif %}
   </main>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   {{ chart_data|json_script:"chart-data" }}
   <script>
+    const savedTheme = localStorage.getItem("panorama-theme") || "light";
+    document.body.dataset.theme = savedTheme;
+
     const chartData = JSON.parse(document.getElementById("chart-data").textContent);
+    const isDark = document.body.dataset.theme === "dark";
     const colors = {
       target: "#e58a2a",
       zz: "#2f80ed",
       contracts: "#65a30d",
       conversion: "#d76b72",
       amount: "#7168b8",
-      grid: "#d9e2ef",
-      text: "#172033",
-      muted: "#667085"
+      grid: isDark ? "#213346" : "#d9e2ef",
+      text: isDark ? "#edf4ff" : "#172033",
+      muted: isDark ? "#9fb0c5" : "#667085"
     };
+
+    const themeToggle = document.getElementById("themeToggle");
+    if (themeToggle) {
+      themeToggle.textContent = isDark ? "Светлая тема" : "Темная тема";
+      themeToggle.addEventListener("click", () => {
+        localStorage.setItem("panorama-theme", isDark ? "light" : "dark");
+        window.location.reload();
+      });
+    }
 
     function money(value) {
       return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
