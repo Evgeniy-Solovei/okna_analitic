@@ -436,10 +436,6 @@
       text-align: right;
     }
 
-    .metric-table tbody tr {
-      cursor: pointer;
-    }
-
     .metric-table tbody tr:hover {
       background: var(--soft);
     }
@@ -560,13 +556,17 @@
     </form>
 
     <section class="kpis" aria-label="Показатели">
-      <a class="kpi" href="{{ kpi_urls.leads }}"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></a>
-      <a class="kpi" href="{{ kpi_urls.target_leads }}"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></a>
-      <a class="kpi" href="{{ kpi_urls.zz }}"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></a>
-      <a class="kpi" href="{{ kpi_urls.conversion }}"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></a>
-      <a class="kpi" href="{{ kpi_urls.contracts }}"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></a>
-      <a class="kpi" href="{{ kpi_urls.avg_check }}"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></a>
-      <a class="kpi" href="{{ kpi_urls.contract_amount }}"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></a>
+      {% comment %}
+      KPI drill-down will be restored later when the detail tables are finalized:
+      leads, target_leads, zz, conversion, contracts, avg_check, contract_amount.
+      {% endcomment %}
+      <article class="kpi"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></article>
+      <article class="kpi"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></article>
+      <article class="kpi"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></article>
+      <article class="kpi"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></article>
+      <article class="kpi"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></article>
+      <article class="kpi"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></article>
+      <article class="kpi"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></article>
     </section>
 
     <section class="grid">
@@ -626,7 +626,7 @@
           </thead>
           <tbody>
             {% for row in direction_rows %}
-              <tr onclick="window.location.href='{{ row.url }}'">
+              <tr>
                 <td><strong>{{ row.direction__name }}</strong></td>
                 <td>{{ row.leads }}</td>
                 <td>{{ row.target_leads }}</td>
@@ -652,7 +652,6 @@
           {% endif %}
           {% if filters.selected_date %} за {{ filters.selected_date|date:'d.m.Y' }}{% endif %}
         </h2>
-        <a class="button" href="/">Сбросить проваливание</a>
       </section>
 
       <section class="grid">

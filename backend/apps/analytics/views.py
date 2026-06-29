@@ -281,16 +281,6 @@ def _dashboard_context(request):
         "contract_amount": "Сумма договоров",
     }.get(detail, "Детализация")
 
-    kpi_urls = {
-        "leads": _url_with(filters, detail="leads"),
-        "target_leads": _url_with(filters, detail="target_leads"),
-        "zz": _url_with(filters, detail="zz"),
-        "conversion": _url_with(filters, detail="conversion"),
-        "contracts": _url_with(filters, detail="contracts"),
-        "avg_check": _url_with(filters, detail="avg_check"),
-        "contract_amount": _url_with(filters, detail="contract_amount"),
-    }
-
     chart_data = {
         "daily": [
             {
@@ -344,7 +334,6 @@ def _dashboard_context(request):
         "direction_rows": direction_rows,
         "daily_rows": daily_rows,
         "chart_data": chart_data,
-        "kpi_urls": kpi_urls,
         "details_enabled": details_enabled,
         "detail_title": detail_title,
         "show_details": show_details,
@@ -354,7 +343,9 @@ def _dashboard_context(request):
 
 @login_required
 def dashboard_entry(request):
-    _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
+    force_sync = request.GET.get("force") == "1"
+    if force_sync or not request.GET:
+        _on_demand_sync_if_needed(force=force_sync)
     return render(request, "analytics/native_dashboard.html", _dashboard_context(request))
 
 
