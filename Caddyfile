@@ -21,12 +21,8 @@
         reverse_proxy django:8000
     }
 
-    handle /auth/* {
-        respond "Not found" 404
-    }
-
-    handle /dashboard/* {
-        respond "Not found" 404
+    handle /metabase {
+        redir /dashboard/2
     }
 
     handle /question/* {

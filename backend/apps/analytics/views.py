@@ -119,6 +119,10 @@ def _metric_queryset(request):
     if selected_date:
         qs = qs.filter(metric_date=selected_date)
     else:
+        if not date_from and not date_to:
+            today = timezone.localdate()
+            date_from = today.replace(day=1)
+            date_to = today
         if date_from:
             qs = qs.filter(metric_date__gte=date_from)
         if date_to:
@@ -196,6 +200,8 @@ def _dashboard_context(request):
 
     selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
     selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
+    selected_manager_title = ", ".join(manager.name for manager in selected_managers) if selected_managers else "Все менеджеры"
+    selected_direction_title = ", ".join(direction.name for direction in selected_directions) if selected_directions else "Все направления"
 
     base_detail_filters = Q()
     if filters["manager_ids"]:
@@ -280,6 +286,8 @@ def _dashboard_context(request):
         ).order_by("name"),
         "selected_managers": selected_managers,
         "selected_directions": selected_directions,
+        "selected_manager_title": selected_manager_title,
+        "selected_direction_title": selected_direction_title,
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
         "daily_rows": daily_rows,
