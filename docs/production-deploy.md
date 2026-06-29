@@ -48,6 +48,7 @@ nano .env
 DJANGO_SECRET_KEY=...
 DJANGO_DEBUG=false
 DJANGO_ALLOWED_HOSTS=platform.oknapanorama.by,localhost,127.0.0.1
+DJANGO_CSRF_TRUSTED_ORIGINS=https://platform.oknapanorama.by
 APP_DOMAIN=platform.oknapanorama.by
 METABASE_SITE_URL=https://platform.oknapanorama.by
 METABASE_DASHBOARD_PATH=/dashboard/2

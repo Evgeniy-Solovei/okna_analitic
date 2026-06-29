@@ -19,6 +19,12 @@ def env_bool(name: str, default: bool = False) -> bool:
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 METABASE_DASHBOARD_PATH = os.getenv("METABASE_DASHBOARD_PATH", "/dashboard/5")
 METABASE_EMBEDDING_SECRET_KEY = os.getenv("METABASE_EMBEDDING_SECRET_KEY", "")
 METABASE_EMBEDDING_DASHBOARD_ID = os.getenv("METABASE_EMBEDDING_DASHBOARD_ID", "")
