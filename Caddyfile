@@ -45,13 +45,5 @@
         respond "Not found" 404
     }
 
-    handle /api/embed/* {
-        reverse_proxy metabase:3000
-    }
-
-    handle /api/* {
-        respond "Not found" 404
-    }
-
     reverse_proxy metabase:3000
 }

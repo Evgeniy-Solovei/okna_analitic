@@ -228,6 +228,13 @@ def get_or_create_dashboard(client: MetabaseClient, collection_id: int) -> int:
     return dashboard["id"]
 
 
+def enable_dashboard_embedding(client: MetabaseClient, dashboard_id: int):
+    dashboard = client.request("GET", f"/api/dashboard/{dashboard_id}")
+    dashboard["enable_embedding"] = True
+    dashboard["embedding_params"] = {}
+    client.request("PUT", f"/api/dashboard/{dashboard_id}", dashboard)
+
+
 def main():
     client = MetabaseClient(BASE_URL)
     client.setup_or_login()
@@ -344,6 +351,7 @@ def main():
         )
 
     client.request("PUT", f"/api/dashboard/{dashboard_id}/cards", {"cards": dashcards, "tabs": []})
+    enable_dashboard_embedding(client, dashboard_id)
     print(f"Dashboard: {BASE_URL}/dashboard/{dashboard_id}")
     print(f"Login: {ADMIN_EMAIL}")
     print(f"Password: {ADMIN_PASSWORD}")
