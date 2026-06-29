@@ -1,0 +1,21 @@
+{$APP_DOMAIN:platform.oknapanorama.by} {
+    encode zstd gzip
+
+    handle / {
+        reverse_proxy django:8000
+    }
+
+    handle /health/* {
+        reverse_proxy django:8000
+    }
+
+    handle /refresh* {
+        reverse_proxy django:8000
+    }
+
+    handle /admin/* {
+        reverse_proxy django:8000
+    }
+
+    reverse_proxy metabase:3000
+}

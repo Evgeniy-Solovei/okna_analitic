@@ -1,0 +1,13 @@
+data/*.sqlite
+data/metabase-app/
+logs/
+vendor/
+*.log
+.env
+.venv/
+.idea/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+staticfiles/
+media/

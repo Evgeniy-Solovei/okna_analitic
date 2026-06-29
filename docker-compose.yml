@@ -1,0 +1,119 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-panorama_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-panorama}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-panorama} -d ${POSTGRES_DB:-panorama_analytics}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  django:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    command: gunicorn config.wsgi:application --chdir /app/backend --bind 0.0.0.0:8000
+    volumes:
+      - ./backend:/app/backend
+      - ./manage.py:/app/manage.py
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    command: celery -A config worker -l info
+    volumes:
+      - ./backend:/app/backend
+      - ./manage.py:/app/manage.py
+    working_dir: /app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery-beat:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    command: celery -A config beat -l info
+    volumes:
+      - ./backend:/app/backend
+      - ./manage.py:/app/manage.py
+    working_dir: /app/backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  metabase:
+    image: metabase/metabase:latest
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: ${POSTGRES_DB:-panorama_analytics}
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER:-panorama}
+      MB_DB_PASS: ${POSTGRES_PASSWORD:-change-me}
+      MB_DB_HOST: postgres
+      MB_SITE_LOCALE: ru
+      MB_SITE_URL: ${METABASE_SITE_URL:-https://platform.oknapanorama.by}
+      MB_ANON_TRACKING_ENABLED: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      django:
+        condition: service_started
+      metabase:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
