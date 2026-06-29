@@ -22,7 +22,7 @@
     }
 
     handle /metabase {
-        redir /dashboard/2
+        redir /dashboard/2 302
     }
 
     handle /question/* {
