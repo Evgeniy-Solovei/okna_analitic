@@ -757,8 +757,7 @@
       if (!items.length) return;
       const dataset = chart.data.datasets[items[0].datasetIndex];
       const row = dataset.rows[items[0].index];
-      const url = row && (row[dataset.urlKey] || row.url);
-      if (url) window.location.href = url;
+      if (row && row.url) window.location.href = row.url;
     }
 
     function drawLineChart(canvasId, rows) {
@@ -769,9 +768,9 @@
         data: {
           labels: rows.map(row => row.label),
           datasets: [
-            { label: "ЦЛ", data: rows.map(row => row.target_leads), rows, urlKey: "target_leads_url", borderColor: colors.target, backgroundColor: colors.target },
-            { label: "ЗЗ", data: rows.map(row => row.zz), rows, urlKey: "zz_url", borderColor: colors.zz, backgroundColor: colors.zz },
-            { label: "Договоры", data: rows.map(row => row.contracts), rows, urlKey: "contracts_url", borderColor: colors.contracts, backgroundColor: colors.contracts }
+            { label: "ЦЛ", data: rows.map(row => row.target_leads), rows, borderColor: colors.target, backgroundColor: colors.target },
+            { label: "ЗЗ", data: rows.map(row => row.zz), rows, borderColor: colors.zz, backgroundColor: colors.zz },
+            { label: "Договоры", data: rows.map(row => row.contracts), rows, borderColor: colors.contracts, backgroundColor: colors.contracts }
           ]
         },
         options: {
@@ -779,6 +778,9 @@
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           onClick: openItem,
+          onHover: (event, items) => {
+            event.native.target.style.cursor = items.length ? "pointer" : "default";
+          },
           elements: {
             line: { tension: 0.25, borderWidth: 3 },
             point: { radius: 3, hoverRadius: 6 }
@@ -815,7 +817,7 @@
       });
     }
 
-    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value, urlKey = "url") {
+    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
       new Chart(canvas, {
@@ -826,7 +828,6 @@
             label: "",
             data: rows.map(row => row.value),
             rows,
-            urlKey,
             backgroundColor: color,
             borderRadius: 5,
             barThickness: 18
@@ -837,6 +838,9 @@
           responsive: true,
           maintainAspectRatio: false,
           onClick: openItem,
+          onHover: (event, items) => {
+            event.native.target.style.cursor = items.length ? "pointer" : "default";
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -872,8 +876,8 @@
 
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
-      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1), "conversion_url");
-      drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money, "amount_url");
+      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
+      drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
     }
 
     renderCharts();

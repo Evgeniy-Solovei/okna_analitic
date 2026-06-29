@@ -290,9 +290,6 @@ def _dashboard_context(request):
                 "zz": int(row["zz"] or 0),
                 "contracts": int(row["contracts"] or 0),
                 "url": row["url"],
-                "target_leads_url": _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None, detail="target_leads"),
-                "zz_url": _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None, detail="zz"),
-                "contracts_url": _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None, detail="contracts"),
             }
             for row in daily_rows
         ],
@@ -301,7 +298,6 @@ def _dashboard_context(request):
                 "label": row["manager__name"],
                 "value": float(row["conversion"] or 0),
                 "url": row["url"],
-                "conversion_url": _url_with(filters, manager=[row["manager_id"]], detail="conversion"),
             }
             for row in conversion_rows
         ],
@@ -310,7 +306,6 @@ def _dashboard_context(request):
                 "label": row["manager__name"],
                 "value": float(row["contract_amount"] or 0),
                 "url": row["url"],
-                "amount_url": _url_with(filters, manager=[row["manager_id"]], detail="contract_amount"),
             }
             for row in amount_rows
         ],
