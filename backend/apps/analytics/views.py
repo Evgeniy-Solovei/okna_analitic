@@ -6,7 +6,8 @@ import jwt
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import connection
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import ExtractHour
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -205,22 +206,25 @@ def _dashboard_context(request):
         row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
         row["url"] = _url_with(filters, direction=[row["direction_id"]])
 
-    daily_rows = list(
-        qs.values("metric_date")
-        .annotate(target_leads=Sum("target_leads"), zz=Sum("zz"), contracts=Sum("contracts"), contract_amount=Sum("contract_amount"))
-        .order_by("metric_date")
-    )
+    selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
+    selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
+    selected_manager_title = ", ".join(manager.name for manager in selected_managers) if selected_managers else "Все менеджеры"
+    selected_direction_title = ", ".join(direction.name for direction in selected_directions) if selected_directions else "Все направления"
+
+    if filters["selected_date"]:
+        daily_rows = _hourly_rows_for_selected_date(filters)
+    else:
+        daily_rows = list(
+            qs.values("metric_date")
+            .annotate(target_leads=Sum("target_leads"), zz=Sum("zz"), contracts=Sum("contracts"), contract_amount=Sum("contract_amount"))
+            .order_by("metric_date")
+        )
     daily_max = max([row["target_leads"] or 0 for row in daily_rows] + [row["zz"] or 0 for row in daily_rows] + [row["contracts"] or 0 for row in daily_rows] + [1])
     for row in daily_rows:
         row["target_height"] = round((row["target_leads"] or 0) / daily_max * 140, 2)
         row["zz_height"] = round((row["zz"] or 0) / daily_max * 140, 2)
         row["contracts_height"] = round((row["contracts"] or 0) / daily_max * 140, 2)
         row["url"] = _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None)
-
-    selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
-    selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
-    selected_manager_title = ", ".join(manager.name for manager in selected_managers) if selected_managers else "Все менеджеры"
-    selected_direction_title = ", ".join(direction.name for direction in selected_directions) if selected_directions else "Все направления"
 
     base_detail_filters = Q()
     if filters["manager_ids"]:
@@ -284,7 +288,7 @@ def _dashboard_context(request):
     chart_data = {
         "daily": [
             {
-                "label": row["metric_date"].strftime("%d.%m"),
+                "label": row.get("label") or row["metric_date"].strftime("%d.%m"),
                 "date": row["metric_date"].isoformat(),
                 "target_leads": int(row["target_leads"] or 0),
                 "zz": int(row["zz"] or 0),
@@ -334,6 +338,56 @@ def _dashboard_context(request):
         "show_details": show_details,
         "details": details,
     }
+
+
+def _hourly_rows_for_selected_date(filters):
+    selected_date = filters["selected_date"]
+    manager_ids = filters["manager_ids"]
+    direction_ids = filters["direction_ids"]
+
+    lead_filters = Q(created_time__date=selected_date)
+    deal_filters = Q(created_time__date=selected_date)
+    zz_filters = Q(first_zz_at__date=selected_date)
+    contract_filters = Q(contract_date=selected_date)
+
+    if manager_ids:
+        lead_filters &= Q(assigned_by_id__in=manager_ids)
+        deal_filters &= Q(assigned_by_id__in=manager_ids)
+        zz_filters &= Q(assigned_by_id__in=manager_ids) | Q(assigned_by__isnull=True, deal__assigned_by_id__in=manager_ids)
+        contract_filters &= Q(assigned_by_id__in=manager_ids)
+    if direction_ids:
+        lead_filters &= Q(direction_id__in=direction_ids)
+        deal_filters &= Q(direction_id__in=direction_ids)
+        zz_filters &= Q(deal__direction_id__in=direction_ids)
+        contract_filters &= Q(direction_id__in=direction_ids)
+
+    target_by_hour = {
+        item["hour"]: item["count"]
+        for item in CrmDeal.objects.filter(deal_filters).annotate(hour=ExtractHour("created_time")).values("hour").annotate(count=Count("id"))
+    }
+    zz_by_hour = {
+        item["hour"]: item["count"]
+        for item in DealFirstZZ.objects.filter(zz_filters).annotate(hour=ExtractHour("first_zz_at")).values("hour").annotate(count=Count("id"))
+    }
+    contracts_by_hour = {
+        item["hour"]: item["count"]
+        for item in CrmDeal.objects.filter(contract_filters, contract_date__isnull=False).annotate(hour=ExtractHour("created_time")).values("hour").annotate(count=Count("id"))
+    }
+
+    rows = []
+    for hour in range(24):
+        rows.append(
+            {
+                "metric_date": selected_date,
+                "label": f"{hour:02d}:00",
+                "target_leads": target_by_hour.get(hour, 0),
+                "zz": zz_by_hour.get(hour, 0),
+                "contracts": contracts_by_hour.get(hour, 0),
+                "contract_amount": 0,
+                "url": _url_with(filters, date=selected_date.isoformat()),
+            }
+        )
+    return rows
 
 
 @login_required
