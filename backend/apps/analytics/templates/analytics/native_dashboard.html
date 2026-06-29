@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Эффективность менеджеров</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #fff;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9e2ef;
+      --blue: #2f80ed;
+      --green: #65a30d;
+      --orange: #e58a2a;
+      --red: #d76b72;
+      --violet: #7168b8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .button {
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .button.primary {
+      border-color: var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+
+    .logout-form { margin: 0; }
+
+    .page {
+      width: min(1600px, 100%);
+      margin: 0 auto;
+      padding: 22px 26px 40px;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input, select {
+      width: 100%;
+      height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 14px;
+    }
+
+    select[multiple] {
+      height: 110px;
+      padding: 7px 10px;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .kpi, .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .kpi {
+      padding: 14px;
+      min-height: 92px;
+    }
+
+    .kpi-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .kpi-value {
+      margin-top: 10px;
+      font-size: 25px;
+      line-height: 1.15;
+      font-weight: 800;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .card {
+      min-width: 0;
+      padding: 16px;
+    }
+
+    .card.wide {
+      grid-column: 1 / -1;
+    }
+
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: minmax(130px, 200px) 1fr 86px;
+      gap: 12px;
+      align-items: center;
+      min-height: 34px;
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+
+    .bar-row:hover {
+      background: #f0f5ff;
+    }
+
+    .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 650;
+    }
+
+    .bar-track {
+      height: 16px;
+      border-radius: 4px;
+      background: #edf2f8;
+      overflow: hidden;
+    }
+
+    .bar {
+      height: 100%;
+      min-width: 2px;
+      border-radius: 4px;
+      background: var(--red);
+    }
+
+    .bar.amount {
+      background: var(--violet);
+    }
+
+    .value {
+      text-align: right;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .daily-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 190px;
+      padding: 12px 4px 0;
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .day {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      min-width: 22px;
+      height: 160px;
+      padding: 0 2px;
+      border-radius: 4px;
+    }
+
+    .day:hover {
+      background: #f0f5ff;
+    }
+
+    .day-bar {
+      width: 5px;
+      min-height: 1px;
+      border-radius: 3px 3px 0 0;
+    }
+
+    .target { background: var(--orange); }
+    .zz { background: var(--blue); }
+    .contracts { background: var(--green); }
+
+    .legend {
+      display: flex;
+      gap: 14px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      margin-right: 5px;
+      border-radius: 50%;
+      vertical-align: middle;
+    }
+
+    .details-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 22px 0 12px;
+    }
+
+    .details-title h2 {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    .empty {
+      padding: 26px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .filter-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    @media (max-width: 1100px) {
+      .filters, .kpis, .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 16px;
+      }
+
+      .actions, .logout-form, .button {
+        width: 100%;
+      }
+
+      .page {
+        padding: 14px;
+      }
+
+      .filters, .grid, .kpis {
+        grid-template-columns: 1fr;
+      }
+
+      .bar-row {
+        grid-template-columns: minmax(100px, 1fr) 1fr 70px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Эффективность менеджеров</h1>
+      <div class="subtitle">Окна Панорама: данные Bitrix24 обновляются автоматически</div>
+    </div>
+    <nav class="actions" aria-label="Действия">
+      <a class="button primary" href="/?force=1">Обновить данные</a>
+      <form class="logout-form" method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button class="button" type="submit">Выйти</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="page">
+    <form class="filters" method="get">
+      <div>
+        <label for="date_from">Дата с</label>
+        <input id="date_from" name="date_from" type="date" value="{{ filters.date_from|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label for="date_to">Дата по</label>
+        <input id="date_to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label for="manager">Менеджер</label>
+        <select id="manager" name="manager" multiple>
+          {% for manager in managers %}
+            <option value="{{ manager.id }}" {% if manager.id in filters.manager_ids %}selected{% endif %}>{{ manager.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="direction">Направление</label>
+        <select id="direction" name="direction" multiple>
+          {% for direction in directions %}
+            <option value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}selected{% endif %}>{{ direction.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-actions">
+        <label>&nbsp;</label>
+        <button class="button primary" type="submit">Применить</button>
+        <a class="button" href="/">Сбросить</a>
+      </div>
+    </form>
+
+    <section class="kpis" aria-label="Показатели">
+      <article class="kpi"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></article>
+      <article class="kpi"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></article>
+      <article class="kpi"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></article>
+      <article class="kpi"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></article>
+      <article class="kpi"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></article>
+      <article class="kpi"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></article>
+      <article class="kpi"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></article>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Динамика ЦЛ, ЗЗ и договоров по дням</h2>
+        {% if daily_rows %}
+          <div class="daily-chart">
+            {% for row in daily_rows %}
+              <a class="day" href="{{ row.url }}" title="{{ row.metric_date|date:'d.m.Y' }}: ЦЛ {{ row.target_leads }}, ЗЗ {{ row.zz }}, договоры {{ row.contracts }}">
+                <span class="day-bar target" style="height: {{ row.target_height }}px"></span>
+                <span class="day-bar zz" style="height: {{ row.zz_height }}px"></span>
+                <span class="day-bar contracts" style="height: {{ row.contracts_height }}px"></span>
+              </a>
+            {% endfor %}
+          </div>
+          <div class="legend">
+            <span><span class="dot target"></span>ЦЛ</span>
+            <span><span class="dot zz"></span>ЗЗ</span>
+            <span><span class="dot contracts"></span>Договоры</span>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>Конверсия по менеджерам</h2>
+        <div class="bar-list">
+          {% for row in conversion_rows %}
+            <a class="bar-row" href="{{ row.url }}">
+              <span class="name">{{ row.manager__name }}</span>
+              <span class="bar-track"><span class="bar" style="display:block;width: {{ row.bar_width }}%"></span></span>
+              <span class="value">{{ row.conversion }}%</span>
+            </a>
+          {% empty %}
+            <div class="empty">Нет данных.</div>
+          {% endfor %}
+        </div>
+      </article>
+
+      <article class="card">
+        <h2>Сумма договоров по менеджерам</h2>
+        <div class="bar-list">
+          {% for row in amount_rows %}
+            <a class="bar-row" href="{{ row.url }}">
+              <span class="name">{{ row.manager__name }}</span>
+              <span class="bar-track"><span class="bar amount" style="display:block;width: {{ row.bar_width }}%"></span></span>
+              <span class="value">{{ row.contract_amount }}</span>
+            </a>
+          {% empty %}
+            <div class="empty">Нет данных.</div>
+          {% endfor %}
+        </div>
+      </article>
+    </section>
+
+    {% if details_enabled %}
+      <section class="details-title">
+        <h2>
+          Детализация
+          {% if selected_managers %}:
+            {% for manager in selected_managers %}{{ manager.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+          {% if filters.selected_date %} за {{ filters.selected_date|date:'d.m.Y' }}{% endif %}
+        </h2>
+        <a class="button" href="/">Сбросить проваливание</a>
+      </section>
+
+      <section class="grid">
+        <article class="card wide">
+          <h2>Лиды</h2>
+          <table>
+            <thead><tr><th>ID</th><th>Дата</th><th>Название</th><th>Менеджер</th><th>Направление</th><th>Источник</th></tr></thead>
+            <tbody>
+              {% for lead in details.leads %}
+                <tr><td>{{ lead.bitrix_id }}</td><td>{{ lead.created_time|date:'d.m.Y H:i' }}</td><td>{{ lead.title }}</td><td>{{ lead.assigned_by.name }}</td><td>{{ lead.direction.name }}</td><td>{{ lead.source_id }}</td></tr>
+              {% empty %}
+                <tr><td colspan="6" class="empty">Нет лидов.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card wide">
+          <h2>Сделки</h2>
+          <table>
+            <thead><tr><th>ID</th><th>Дата</th><th>Название</th><th>Менеджер</th><th>Направление</th><th>Этап</th></tr></thead>
+            <tbody>
+              {% for deal in details.deals %}
+                <tr><td>{{ deal.bitrix_id }}</td><td>{{ deal.created_time|date:'d.m.Y H:i' }}</td><td>{{ deal.title }}</td><td>{{ deal.assigned_by.name }}</td><td>{{ deal.direction.name }}</td><td>{{ deal.stage.name }}</td></tr>
+              {% empty %}
+                <tr><td colspan="6" class="empty">Нет сделок.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h2>ЗЗ</h2>
+          <table>
+            <thead><tr><th>ID сделки</th><th>Дата ЗЗ</th><th>Название</th><th>Менеджер</th></tr></thead>
+            <tbody>
+              {% for zz in details.zz %}
+                <tr><td>{{ zz.deal.bitrix_id }}</td><td>{{ zz.first_zz_at|date:'d.m.Y H:i' }}</td><td>{{ zz.deal.title }}</td><td>{% firstof zz.assigned_by.name zz.deal.assigned_by.name %}</td></tr>
+              {% empty %}
+                <tr><td colspan="4" class="empty">Нет ЗЗ.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <h2>Договоры</h2>
+          <table>
+            <thead><tr><th>ID сделки</th><th>Дата</th><th>Название</th><th>Сумма</th></tr></thead>
+            <tbody>
+              {% for contract in details.contracts %}
+                <tr><td>{{ contract.bitrix_id }}</td><td>{{ contract.contract_date|date:'d.m.Y' }}</td><td>{{ contract.title }}</td><td>{{ contract.contract_amount }}</td></tr>
+              {% empty %}
+                <tr><td colspan="4" class="empty">Нет договоров.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </article>
+      </section>
+    {% endif %}
+  </main>
+</body>
+</html>
