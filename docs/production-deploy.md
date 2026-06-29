@@ -30,9 +30,9 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker
 Код проекта:
 
 ```bash
-mkdir -p /opt/panorama-analytics
-cd /opt/panorama-analytics
-# дальше либо git clone, либо загрузить файлы проекта сюда
+mkdir -p ~/panorama-analytics
+cd ~/panorama-analytics
+git clone https://github.com/Evgeniy-Solovei/okna_analitic.git .
 ```
 
 Заполнить `.env` реальными значениями:
@@ -50,7 +50,10 @@ DJANGO_DEBUG=false
 DJANGO_ALLOWED_HOSTS=platform.oknapanorama.by,localhost,127.0.0.1
 APP_DOMAIN=platform.oknapanorama.by
 METABASE_SITE_URL=https://platform.oknapanorama.by
-METABASE_DASHBOARD_PATH=/dashboard/5
+METABASE_DASHBOARD_PATH=/dashboard/2
+METABASE_EMBEDDING_DASHBOARD_ID=2
+METABASE_EMBEDDING_SECRET_KEY=заменить-на-длинную-случайную-строку
+MB_ENABLE_EMBEDDING=true
 ON_DEMAND_SYNC_ENABLED=true
 ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS=60
 
@@ -132,7 +135,9 @@ from bi_manager_daily_metrics;
 
 В проекте настроен `celery-beat`: задача `apps.analytics.tasks.sync_bitrix24_incremental` запускается один раз в 10 минут.
 
-Домен тоже запускает быстрый on-demand sync: `https://platform.oknapanorama.by/` попадает в Django, Django делает incremental sync, если последний такой sync был больше `ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS` секунд назад, и потом редиректит на Metabase dashboard.
+Домен тоже запускает быстрый on-demand sync: `https://platform.oknapanorama.by/` попадает в Django, Django делает incremental sync, если последний такой sync был больше `ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS` секунд назад, и потом показывает встроенный Metabase dashboard без оболочки Metabase.
+
+В production клиентский вход работает иначе: Django показывает собственную страницу с embedded Metabase dashboard. Поэтому клиент не видит боковые панели, кнопку создания отчетов, SQL-редактор, коллекции и администрирование Metabase.
 
 Что делает sync каждые 10 минут:
 
@@ -153,7 +158,7 @@ docker compose exec django python manage.py sync_bitrix24 --incremental
 Если Celery не нужен, то вместо `celery` и `celery-beat` можно запускать cron на хосте:
 
 ```cron
-*/10 * * * * cd /opt/panorama-analytics && docker compose exec -T django python manage.py sync_bitrix24 --incremental >> /var/log/panorama-sync.log 2>&1
+*/10 * * * * cd ~/panorama-analytics && docker compose exec -T django python manage.py sync_bitrix24 --incremental >> /var/log/panorama-sync.log 2>&1
 ```
 
 ## 4. Metabase production setup
@@ -169,7 +174,7 @@ Metabase admin нужен только разработчику/админист
 - видеть админку;
 - сломать dashboard.
 
-Нужно сделать:
+Если клиенту все-таки создаются пользователи внутри Metabase, нужно сделать:
 
 1. Создать группу `Viewers` или `Заказчик`.
 2. Убрать лишние права у группы `All users`.
@@ -178,19 +183,40 @@ Metabase admin нужен только разработчику/админист
 5. Создать пользователей клиента в этой группе.
 6. Админский пользователь остается только у нас.
 
-Публично открывать:
+Клиенту открывать:
 
 ```text
 https://platform.oknapanorama.by/
 ```
 
-Если надо открыть Metabase напрямую:
+Публичные Metabase URL вида `/dashboard/<id>`, `/question/*`, `/collection/*`, `/auth/*` закрыты через Caddy.
 
-```text
-https://platform.oknapanorama.by/dashboard/<id>
+`/dashboard/2` - это внутренний ID Metabase на текущем сервере. Для клиентского wrapper он задается в `.env` через `METABASE_EMBEDDING_DASHBOARD_ID=2`.
+
+После включения embedded-режима пересобрать контейнеры:
+
+```bash
+docker compose up -d --build django celery celery-beat metabase caddy
+docker compose exec django python manage.py migrate
 ```
 
-`/dashboard/5` - это внутренний ID Metabase. Он не должен меняться после production bootstrap, потому что скрипт теперь переиспользует dashboard по имени.
+Создать обычного пользователя для клиента в Django:
+
+```bash
+docker compose exec django python manage.py shell -c "from django.contrib.auth.models import User; User.objects.create_user('client', password='заменить-на-пароль')"
+```
+
+Админский интерфейс Metabase с публичного домена закрыт. Если разработчику нужно зайти в Metabase напрямую, открыть SSH tunnel с локального компьютера:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 panorama@dashboard
+```
+
+Потом открыть локально:
+
+```text
+http://localhost:3000
+```
 
 ## 5. Что нельзя убрать в прямом Metabase UI
 
@@ -204,7 +230,7 @@ https://platform.oknapanorama.by/dashboard/<id>
 
 Это не баг проекта, а устройство Metabase.
 
-Для полностью чистого интерфейса нужен отдельный Django/React экран и embedded dashboard. Тогда клиент видит только нашу страницу, а не Metabase-конструктор.
+В проекте уже используется отдельный Django wrapper и embedded dashboard. Это штатный способ показать только рабочий dashboard, без конструктора Metabase.
 
 ## 6. Светлая и темная тема
 

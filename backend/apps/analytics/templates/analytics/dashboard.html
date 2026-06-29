@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Эффективность менеджеров</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #6a7485;
+      --line: #dbe3ef;
+      --accent: #2f80ed;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 16px 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .title {
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font-size: 14px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .logout-form {
+      margin: 0;
+      display: flex;
+    }
+
+    .logout-form .button {
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .frame-wrap {
+      min-height: 0;
+      padding: 18px;
+    }
+
+    iframe {
+      display: block;
+      width: 100%;
+      height: calc(100vh - 91px);
+      min-height: 680px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 16px;
+      }
+
+      .actions {
+        width: 100%;
+      }
+
+      .button {
+        flex: 1;
+      }
+
+      .logout-form {
+        flex: 1;
+      }
+
+      .frame-wrap {
+        padding: 10px;
+      }
+
+      iframe {
+        height: calc(100vh - 142px);
+        min-height: 620px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="title">
+        <h1>Эффективность менеджеров</h1>
+        <div class="subtitle">Окна Панорама: данные Bitrix24 обновляются автоматически</div>
+      </div>
+      <nav class="actions" aria-label="Действия">
+        <a class="button primary" href="/?force=1">Обновить данные</a>
+        <form class="logout-form" method="post" action="{% url 'logout' %}">
+          {% csrf_token %}
+          <button class="button" type="submit">Выйти</button>
+        </form>
+      </nav>
+    </header>
+    <section class="frame-wrap" aria-label="Дашборд">
+      <iframe
+        src="{{ dashboard_url }}"
+        title="Эффективность менеджеров"
+        allowtransparency="true"
+      ></iframe>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,9 +1,12 @@
+import time
 from datetime import timedelta
 
+import jwt
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
 from django.db import connection
 from django.http import JsonResponse
-from django.shortcuts import redirect
+from django.shortcuts import render
 from django.utils import timezone
 
 from .services import bitrix_datetime, get_sync_cursor, parse_bitrix_datetime, run_bitrix24_sync, set_sync_cursor
@@ -49,11 +52,40 @@ def _on_demand_sync_if_needed(force: bool = False) -> dict:
         _release_advisory_lock()
 
 
+def _metabase_dashboard_id() -> int:
+    if settings.METABASE_EMBEDDING_DASHBOARD_ID:
+        return int(settings.METABASE_EMBEDDING_DASHBOARD_ID)
+    return int(settings.METABASE_DASHBOARD_PATH.rstrip("/").split("/")[-1])
+
+
+def _metabase_embed_url() -> str:
+    payload = {
+        "resource": {"dashboard": _metabase_dashboard_id()},
+        "params": {},
+        "exp": round(time.time()) + 12 * 60 * 60,
+    }
+    token = jwt.encode(payload, settings.METABASE_EMBEDDING_SECRET_KEY, algorithm="HS256")
+    return f"/embed/dashboard/{token}#bordered=false&titled=false"
+
+
+@login_required
 def dashboard_entry(request):
     _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
-    return redirect(settings.METABASE_DASHBOARD_PATH)
+    if not settings.METABASE_EMBEDDING_SECRET_KEY:
+        return render(
+            request,
+            "analytics/dashboard_not_configured.html",
+            {"message": "Не задан METABASE_EMBEDDING_SECRET_KEY."},
+            status=503,
+        )
+    return render(
+        request,
+        "analytics/dashboard.html",
+        {"dashboard_url": _metabase_embed_url()},
+    )
 
 
+@login_required
 def refresh_status(request):
     result = _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
     return JsonResponse(result)

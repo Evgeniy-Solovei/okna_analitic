@@ -20,6 +20,8 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret-key")
 DEBUG = env_bool("DJANGO_DEBUG", True)
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 METABASE_DASHBOARD_PATH = os.getenv("METABASE_DASHBOARD_PATH", "/dashboard/5")
+METABASE_EMBEDDING_SECRET_KEY = os.getenv("METABASE_EMBEDDING_SECRET_KEY", "")
+METABASE_EMBEDDING_DASHBOARD_ID = os.getenv("METABASE_EMBEDDING_DASHBOARD_ID", "")
 ON_DEMAND_SYNC_ENABLED = env_bool("ON_DEMAND_SYNC_ENABLED", True)
 ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS = int(os.getenv("ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS", "60"))
 
@@ -44,6 +46,9 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "login"
 
 TEMPLATES = [
     {

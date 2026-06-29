@@ -13,8 +13,44 @@
         reverse_proxy django:8000
     }
 
+    handle /accounts/* {
+        reverse_proxy django:8000
+    }
+
     handle /admin/* {
         reverse_proxy django:8000
+    }
+
+    handle /auth/* {
+        respond "Not found" 404
+    }
+
+    handle /dashboard/* {
+        respond "Not found" 404
+    }
+
+    handle /question/* {
+        respond "Not found" 404
+    }
+
+    handle /collection/* {
+        respond "Not found" 404
+    }
+
+    handle /browse/* {
+        respond "Not found" 404
+    }
+
+    handle /model/* {
+        respond "Not found" 404
+    }
+
+    handle /api/embed/* {
+        reverse_proxy metabase:3000
+    }
+
+    handle /api/* {
+        respond "Not found" 404
     }
 
     reverse_proxy metabase:3000
