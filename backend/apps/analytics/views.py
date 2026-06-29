@@ -239,6 +239,36 @@ def _dashboard_context(request):
             "contracts": CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(contract_detail_filters, contract_date__isnull=False).order_by("-contract_date")[:50],
         }
 
+    chart_data = {
+        "daily": [
+            {
+                "label": row["metric_date"].strftime("%d.%m"),
+                "date": row["metric_date"].isoformat(),
+                "target_leads": int(row["target_leads"] or 0),
+                "zz": int(row["zz"] or 0),
+                "contracts": int(row["contracts"] or 0),
+                "url": row["url"],
+            }
+            for row in daily_rows
+        ],
+        "conversion": [
+            {
+                "label": row["manager__name"],
+                "value": float(row["conversion"] or 0),
+                "url": row["url"],
+            }
+            for row in conversion_rows
+        ],
+        "amounts": [
+            {
+                "label": row["manager__name"],
+                "value": float(row["contract_amount"] or 0),
+                "url": row["url"],
+            }
+            for row in amount_rows
+        ],
+    }
+
     return {
         "totals": totals,
         "filters": filters,
@@ -253,6 +283,7 @@ def _dashboard_context(request):
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
         "daily_rows": daily_rows,
+        "chart_data": chart_data,
         "details_enabled": details_enabled,
         "details": details,
     }

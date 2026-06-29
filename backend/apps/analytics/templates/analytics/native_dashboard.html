@@ -117,11 +117,6 @@
       font-size: 14px;
     }
 
-    select[multiple] {
-      height: 110px;
-      padding: 7px 10px;
-    }
-
     .kpis {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -261,6 +256,38 @@
     .zz { background: var(--blue); }
     .contracts { background: var(--green); }
 
+    .chart-box {
+      position: relative;
+      width: 100%;
+      height: 320px;
+    }
+
+    .chart-box.small {
+      height: 340px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 20;
+      display: none;
+      max-width: 260px;
+      padding: 8px 10px;
+      border: 1px solid #c8d4e5;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      box-shadow: 0 12px 30px rgba(23, 32, 51, 0.16);
+      font-size: 13px;
+      pointer-events: none;
+      white-space: pre-line;
+    }
+
     .legend {
       display: flex;
       gap: 14px;
@@ -386,7 +413,8 @@
       </div>
       <div>
         <label for="manager">Менеджер</label>
-        <select id="manager" name="manager" multiple>
+        <select id="manager" name="manager">
+          <option value="">Все менеджеры</option>
           {% for manager in managers %}
             <option value="{{ manager.id }}" {% if manager.id in filters.manager_ids %}selected{% endif %}>{{ manager.name }}</option>
           {% endfor %}
@@ -394,7 +422,8 @@
       </div>
       <div>
         <label for="direction">Направление</label>
-        <select id="direction" name="direction" multiple>
+        <select id="direction" name="direction">
+          <option value="">Все направления</option>
           {% for direction in directions %}
             <option value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}selected{% endif %}>{{ direction.name }}</option>
           {% endfor %}
@@ -421,14 +450,8 @@
       <article class="card wide">
         <h2>Динамика ЦЛ, ЗЗ и договоров по дням</h2>
         {% if daily_rows %}
-          <div class="daily-chart">
-            {% for row in daily_rows %}
-              <a class="day" href="{{ row.url }}" title="{{ row.metric_date|date:'d.m.Y' }}: ЦЛ {{ row.target_leads }}, ЗЗ {{ row.zz }}, договоры {{ row.contracts }}">
-                <span class="day-bar target" style="height: {{ row.target_height }}px"></span>
-                <span class="day-bar zz" style="height: {{ row.zz_height }}px"></span>
-                <span class="day-bar contracts" style="height: {{ row.contracts_height }}px"></span>
-              </a>
-            {% endfor %}
+          <div class="chart-box">
+            <canvas id="dailyChart" aria-label="Динамика по дням"></canvas>
           </div>
           <div class="legend">
             <span><span class="dot target"></span>ЦЛ</span>
@@ -442,32 +465,24 @@
 
       <article class="card">
         <h2>Конверсия по менеджерам</h2>
-        <div class="bar-list">
-          {% for row in conversion_rows %}
-            <a class="bar-row" href="{{ row.url }}">
-              <span class="name">{{ row.manager__name }}</span>
-              <span class="bar-track"><span class="bar" style="display:block;width: {{ row.bar_width }}%"></span></span>
-              <span class="value">{{ row.conversion }}%</span>
-            </a>
-          {% empty %}
-            <div class="empty">Нет данных.</div>
-          {% endfor %}
-        </div>
+        {% if conversion_rows %}
+          <div class="chart-box small">
+            <canvas id="conversionChart" aria-label="Конверсия по менеджерам"></canvas>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
       </article>
 
       <article class="card">
         <h2>Сумма договоров по менеджерам</h2>
-        <div class="bar-list">
-          {% for row in amount_rows %}
-            <a class="bar-row" href="{{ row.url }}">
-              <span class="name">{{ row.manager__name }}</span>
-              <span class="bar-track"><span class="bar amount" style="display:block;width: {{ row.bar_width }}%"></span></span>
-              <span class="value">{{ row.contract_amount }}</span>
-            </a>
-          {% empty %}
-            <div class="empty">Нет данных.</div>
-          {% endfor %}
-        </div>
+        {% if amount_rows %}
+          <div class="chart-box small">
+            <canvas id="amountChart" aria-label="Сумма договоров по менеджерам"></canvas>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
       </article>
     </section>
 
@@ -542,5 +557,214 @@
       </section>
     {% endif %}
   </main>
+  <div class="tooltip" id="chartTooltip"></div>
+  {{ chart_data|json_script:"chart-data" }}
+  <script>
+    const chartData = JSON.parse(document.getElementById("chart-data").textContent);
+    const tooltip = document.getElementById("chartTooltip");
+    const colors = {
+      target: "#e58a2a",
+      zz: "#2f80ed",
+      contracts: "#65a30d",
+      conversion: "#d76b72",
+      amount: "#7168b8",
+      grid: "#d9e2ef",
+      text: "#172033",
+      muted: "#667085"
+    };
+
+    function money(value) {
+      return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
+    }
+
+    function setupCanvas(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return { ctx, width: rect.width, height: rect.height };
+    }
+
+    function niceMax(value) {
+      if (!value) return 10;
+      const power = Math.pow(10, Math.floor(Math.log10(value)));
+      return Math.ceil(value / power) * power;
+    }
+
+    function drawAxes(ctx, area, maxValue, steps = 4) {
+      ctx.strokeStyle = colors.grid;
+      ctx.fillStyle = colors.muted;
+      ctx.lineWidth = 1;
+      ctx.font = "12px Inter, sans-serif";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+
+      for (let i = 0; i <= steps; i++) {
+        const value = maxValue * i / steps;
+        const y = area.bottom - (area.bottom - area.top) * i / steps;
+        ctx.beginPath();
+        ctx.moveTo(area.left, y);
+        ctx.lineTo(area.right, y);
+        ctx.stroke();
+        ctx.fillText(money(value), area.left - 8, y);
+      }
+    }
+
+    function showTooltip(text, event) {
+      tooltip.textContent = text;
+      tooltip.style.display = "block";
+      tooltip.style.left = `${event.clientX + 12}px`;
+      tooltip.style.top = `${event.clientY + 12}px`;
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = "none";
+    }
+
+    function drawLineChart(canvasId, rows) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !rows.length) return;
+      const { ctx, width, height } = setupCanvas(canvas);
+      const area = { left: 58, right: width - 20, top: 18, bottom: height - 42 };
+      const maxValue = niceMax(Math.max(...rows.flatMap(row => [row.target_leads, row.zz, row.contracts]), 1));
+      const hits = [];
+
+      ctx.clearRect(0, 0, width, height);
+      drawAxes(ctx, area, maxValue);
+
+      function point(rowIndex, value) {
+        const x = rows.length === 1
+          ? (area.left + area.right) / 2
+          : area.left + (area.right - area.left) * rowIndex / (rows.length - 1);
+        const y = area.bottom - (area.bottom - area.top) * value / maxValue;
+        return { x, y };
+      }
+
+      function drawSeries(key, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        rows.forEach((row, index) => {
+          const { x, y } = point(index, row[key]);
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        rows.forEach((row, index) => {
+          const { x, y } = point(index, row[key]);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+          hits.push({
+            x, y, radius: 10, url: row.url,
+            text: `${row.label}\nЦЛ: ${row.target_leads}\nЗЗ: ${row.zz}\nДоговоры: ${row.contracts}`
+          });
+        });
+      }
+
+      drawSeries("target_leads", colors.target);
+      drawSeries("zz", colors.zz);
+      drawSeries("contracts", colors.contracts);
+
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.font = "12px Inter, sans-serif";
+      rows.forEach((row, index) => {
+        if (rows.length > 18 && index % Math.ceil(rows.length / 12) !== 0) return;
+        const { x } = point(index, 0);
+        ctx.fillText(row.label, x, area.bottom + 10);
+      });
+
+      bindHits(canvas, hits);
+    }
+
+    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !rows.length) return;
+      const { ctx, width, height } = setupCanvas(canvas);
+      const area = { left: 150, right: width - 74, top: 14, bottom: height - 18 };
+      const maxValue = niceMax(Math.max(...rows.map(row => row.value), 1));
+      const rowHeight = Math.min(28, (area.bottom - area.top) / rows.length);
+      const gap = Math.max(5, rowHeight * 0.35);
+      const hits = [];
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.font = "12px Inter, sans-serif";
+      ctx.fillStyle = colors.muted;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+
+      rows.forEach((row, index) => {
+        const y = area.top + index * (rowHeight + gap);
+        const centerY = y + rowHeight / 2;
+        const barWidth = (area.right - area.left) * (row.value || 0) / maxValue;
+        const label = row.label.length > 22 ? `${row.label.slice(0, 21)}...` : row.label;
+
+        ctx.fillStyle = colors.text;
+        ctx.textAlign = "right";
+        ctx.fillText(label, area.left - 12, centerY);
+
+        ctx.fillStyle = "#edf2f8";
+        ctx.fillRect(area.left, y, area.right - area.left, rowHeight);
+        ctx.fillStyle = color;
+        ctx.fillRect(area.left, y, Math.max(2, barWidth), rowHeight);
+
+        ctx.fillStyle = colors.muted;
+        ctx.textAlign = "left";
+        ctx.fillText(`${formatter(row.value)}${suffix}`, area.right + 10, centerY);
+
+        hits.push({
+          x: area.left,
+          y,
+          width: area.right - area.left,
+          height: rowHeight,
+          url: row.url,
+          text: `${row.label}\n${formatter(row.value)}${suffix}`
+        });
+      });
+
+      bindHits(canvas, hits);
+    }
+
+    function bindHits(canvas, hits) {
+      canvas.addEventListener("mousemove", event => {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const hit = hits.find(item => {
+          if (item.radius) return Math.hypot(item.x - x, item.y - y) <= item.radius;
+          return x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height;
+        });
+        canvas.style.cursor = hit ? "pointer" : "default";
+        if (hit) showTooltip(hit.text, event);
+        else hideTooltip();
+      });
+      canvas.addEventListener("mouseleave", hideTooltip);
+      canvas.addEventListener("click", event => {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const hit = hits.find(item => {
+          if (item.radius) return Math.hypot(item.x - x, item.y - y) <= item.radius;
+          return x >= item.x && x <= item.x + item.width && y >= item.y && y <= item.y + item.height;
+        });
+        if (hit) window.location.href = hit.url;
+      });
+    }
+
+    function renderCharts() {
+      drawLineChart("dailyChart", chartData.daily);
+      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
+      drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
+    }
+
+    window.addEventListener("resize", renderCharts);
+    renderCharts();
+  </script>
 </body>
 </html>
