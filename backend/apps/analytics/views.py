@@ -28,6 +28,9 @@ def _on_demand_sync_if_needed(force: bool = False) -> dict:
         return {"skipped": True, "reason": "disabled"}
 
     now = timezone.now()
+    if not get_sync_cursor("bitrix24.modified_at"):
+        return {"skipped": True, "reason": "initial_sync_required"}
+
     last_value = get_sync_cursor("bitrix24.on_demand_last_at")
     last_at = parse_bitrix_datetime(last_value) if last_value else None
     min_interval = timedelta(seconds=settings.ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS)

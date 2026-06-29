@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend /app/backend
 COPY manage.py /app/manage.py
+COPY scripts /app/scripts
 
 EXPOSE 8000
 
 CMD ["gunicorn", "config.wsgi:application", "--chdir", "/app/backend", "--bind", "0.0.0.0:8000"]
-
