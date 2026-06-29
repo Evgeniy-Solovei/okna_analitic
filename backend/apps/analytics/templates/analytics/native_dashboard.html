@@ -753,8 +753,8 @@
       return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
     }
 
-    function openItem(chart, event, items) {
-      if (!items.length) return;
+    function openItem(event, items, chart) {
+      if (!items.length || !chart) return;
       const dataset = chart.data.datasets[items[0].datasetIndex];
       const row = dataset.rows[items[0].index];
       if (row && row.url) window.location.href = row.url;
