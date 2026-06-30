@@ -259,7 +259,9 @@ def _dashboard_context(request):
             first_zz_filters &= Q(first_zz_at__date__lte=filters["date_to"])
 
     detail = filters["detail"]
-    details_enabled = bool(filters["manager_ids"] or filters["selected_date"] or detail)
+    # Detail tables are temporarily disabled. Keep the query code below for the
+    # next iteration when lead/deal drill-down tables are finalized.
+    details_enabled = False
     details = {}
     if details_enabled:
         details = {
