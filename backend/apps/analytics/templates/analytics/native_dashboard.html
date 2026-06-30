@@ -198,7 +198,7 @@
       right: 0;
       max-height: 280px;
       overflow: auto;
-      padding: 8px;
+      padding: 8px 8px 58px;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #fff;
@@ -220,6 +220,14 @@
       background: var(--soft);
     }
 
+    .check-row.all-option {
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 6px;
+      padding: 10px 8px;
+      color: var(--blue);
+      font-weight: 700;
+    }
+
     .check-row input {
       width: 16px;
       height: 16px;
@@ -229,11 +237,11 @@
 
     .multi-actions {
       position: sticky;
-      bottom: -8px;
+      bottom: 0;
       display: grid;
       grid-template-columns: 1fr;
       gap: 8px;
-      margin: 8px -8px -8px;
+      margin: 8px -8px -58px;
       padding: 8px;
       border-top: 1px solid var(--line);
       background: var(--panel);
@@ -288,6 +296,18 @@
       min-width: 0;
       padding: 16px;
       overflow-x: auto;
+    }
+
+    .table-card {
+      position: relative;
+    }
+
+    .scroll-hint {
+      display: none;
+      margin: -4px 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
     }
 
     .card.wide {
@@ -623,11 +643,28 @@
         left: 10px;
         right: 10px;
         bottom: 12px;
-        max-height: min(420px, 70vh);
+        max-height: min(460px, 74vh);
+        padding: 10px 10px 66px;
+        border-radius: 10px;
       }
 
       .check-row {
-        min-height: 40px;
+        min-height: 44px;
+        font-size: 15px;
+      }
+
+      .check-row.all-option {
+        min-height: 48px;
+      }
+
+      .check-row input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .multi-actions {
+        margin: 10px -10px -66px;
+        padding: 10px;
       }
 
       table {
@@ -637,6 +674,14 @@
 
       th, td {
         padding: 9px 7px;
+      }
+
+      .table-card {
+        padding-top: 12px;
+      }
+
+      .scroll-hint {
+        display: block;
       }
     }
 
@@ -655,6 +700,10 @@
 
       .chart-box.small {
         height: 300px;
+      }
+
+      .filter-actions {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -691,6 +740,7 @@
         <details class="multi-select" id="manager">
           <summary>{{ selected_manager_title }}</summary>
           <div class="multi-menu">
+            <a class="check-row all-option" href="{{ manager_all_url }}">Все менеджеры</a>
             {% for manager in managers %}
               <label class="check-row">
                 <input type="checkbox" name="manager" value="{{ manager.id }}" {% if manager.id in filters.manager_ids %}checked{% endif %}>
@@ -708,6 +758,7 @@
         <details class="multi-select" id="direction">
           <summary>{{ selected_direction_title }}</summary>
           <div class="multi-menu">
+            <a class="check-row all-option" href="{{ direction_all_url }}">Все направления</a>
             {% for direction in directions %}
               <label class="check-row">
                 <input type="checkbox" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
@@ -782,8 +833,9 @@
     </section>
 
     <section class="grid">
-      <article class="card wide">
+      <article class="card wide table-card">
         <h2>Направления</h2>
+        <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
         <table class="metric-table">
           <thead>
             <tr>
@@ -828,8 +880,9 @@
 
       <section class="grid">
         {% if show_details.leads %}
-        <article class="card wide">
+        <article class="card wide table-card">
           <h2>Лиды</h2>
+          <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
             <thead><tr><th>ID</th><th>Дата</th><th>Название</th><th>Менеджер</th><th>Направление</th><th>Источник</th></tr></thead>
             <tbody>
@@ -844,8 +897,9 @@
         {% endif %}
 
         {% if show_details.target_leads %}
-        <article class="card wide">
+        <article class="card wide table-card">
           <h2>Целевые лиды / сделки</h2>
+          <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
             <thead><tr><th>ID</th><th>Дата</th><th>Название</th><th>Менеджер</th><th>Направление</th><th>Этап</th></tr></thead>
             <tbody>
@@ -860,8 +914,9 @@
         {% endif %}
 
         {% if show_details.zz %}
-        <article class="card">
+        <article class="card table-card">
           <h2>ЗЗ</h2>
+          <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
             <thead><tr><th>ID сделки</th><th>Дата ЗЗ</th><th>Название</th><th>Менеджер</th></tr></thead>
             <tbody>
@@ -876,8 +931,9 @@
         {% endif %}
 
         {% if show_details.contracts %}
-        <article class="card">
+        <article class="card table-card">
           <h2>Договоры</h2>
+          <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
             <thead><tr><th>ID сделки</th><th>Дата</th><th>Название</th><th>Сумма</th></tr></thead>
             <tbody>

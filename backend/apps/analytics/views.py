@@ -315,6 +315,9 @@ def _dashboard_context(request):
         ],
     }
 
+    manager_all_url = _url_with(filters, manager=[])
+    direction_all_url = _url_with(filters, direction=[])
+
     return {
         "totals": totals,
         "filters": filters,
@@ -328,6 +331,8 @@ def _dashboard_context(request):
         "selected_directions": selected_directions,
         "selected_manager_title": selected_manager_title,
         "selected_direction_title": selected_direction_title,
+        "manager_all_url": manager_all_url,
+        "direction_all_url": direction_all_url,
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
         "direction_rows": direction_rows,
