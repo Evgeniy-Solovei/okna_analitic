@@ -35,6 +35,7 @@
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
+      -webkit-text-size-adjust: 100%;
     }
 
     a { color: inherit; text-decoration: none; }
@@ -70,10 +71,12 @@
       display: flex;
       gap: 10px;
       flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
     .button {
-      height: 40px;
+      min-height: 40px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -140,6 +143,12 @@
       font-size: 14px;
     }
 
+    .active-filter {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.12);
+      font-weight: 700;
+    }
+
     .multi-select {
       position: relative;
     }
@@ -161,6 +170,12 @@
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+    }
+
+    .multi-select:has(input:checked) summary {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.12);
+      font-weight: 700;
     }
 
     .multi-select summary::-webkit-details-marker {
@@ -212,6 +227,18 @@
       padding: 0;
     }
 
+    .multi-actions {
+      position: sticky;
+      bottom: -8px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin: 8px -8px -8px;
+      padding: 8px;
+      border-top: 1px solid var(--line);
+      background: var(--panel);
+    }
+
     .kpis {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -260,6 +287,7 @@
     .card {
       min-width: 0;
       padding: 16px;
+      overflow-x: auto;
     }
 
     .card.wide {
@@ -362,6 +390,7 @@
       position: relative;
       width: 100%;
       height: 320px;
+      min-height: 260px;
     }
 
     .chart-box.small {
@@ -424,6 +453,7 @@
 
     table {
       width: 100%;
+      min-width: 720px;
       border-collapse: collapse;
       font-size: 14px;
     }
@@ -462,37 +492,169 @@
       gap: 8px;
     }
 
-    @media (max-width: 1100px) {
-      .filters, .kpis, .grid {
+    @media (max-width: 1180px) {
+      .filters {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .kpis {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .filters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .kpis {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px;
+      }
+
+      h1 {
+        font-size: 22px;
+      }
+
+      .subtitle {
+        font-size: 13px;
+      }
+
+      .actions {
+        display: grid;
         grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .logout-form,
+      .button {
+        width: 100%;
+      }
+
+      .button {
+        min-height: 42px;
+        padding: 0 10px;
+        font-size: 14px;
+      }
+
+      .page {
+        padding: 10px;
+      }
+
+      .filters {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .filter-actions {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .filter-actions label {
+        display: none;
       }
 
       .kpis {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (max-width: 720px) {
-      .topbar {
-        align-items: flex-start;
-        flex-direction: column;
-        padding: 16px;
+        gap: 10px;
       }
 
-      .actions, .logout-form, .button {
-        width: 100%;
+      .kpi {
+        min-height: 82px;
+        padding: 12px;
       }
 
-      .page {
-        padding: 14px;
+      .kpi-value {
+        font-size: 22px;
+        overflow-wrap: anywhere;
       }
 
-      .filters, .grid, .kpis {
-        grid-template-columns: 1fr;
+      .card {
+        padding: 12px;
+      }
+
+      .card h2 {
+        font-size: 16px;
+      }
+
+      .chart-box {
+        height: 280px;
+        min-height: 240px;
+      }
+
+      .chart-box.small {
+        height: 320px;
       }
 
       .bar-row {
         grid-template-columns: minmax(100px, 1fr) 1fr 70px;
+      }
+
+      .legend {
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .multi-menu {
+        position: fixed;
+        top: auto;
+        left: 10px;
+        right: 10px;
+        bottom: 12px;
+        max-height: min(420px, 70vh);
+      }
+
+      .check-row {
+        min-height: 40px;
+      }
+
+      table {
+        min-width: 680px;
+        font-size: 13px;
+      }
+
+      th, td {
+        padding: 9px 7px;
+      }
+    }
+
+    @media (max-width: 420px) {
+      .actions {
+        grid-template-columns: 1fr;
+      }
+
+      .kpis {
+        grid-template-columns: 1fr;
+      }
+
+      .chart-box {
+        height: 250px;
+      }
+
+      .chart-box.small {
+        height: 300px;
       }
     }
   </style>
@@ -518,11 +680,11 @@
     <form class="filters" method="get">
       <div>
         <label for="date_from">Дата с</label>
-        <input id="date_from" name="date_from" type="date" value="{{ filters.date_from|date:'Y-m-d' }}">
+        <input id="date_from" name="date_from" type="date" value="{{ filters.date_from|date:'Y-m-d' }}" class="{% if filters.date_from %}active-filter{% endif %}">
       </div>
       <div>
         <label for="date_to">Дата по</label>
-        <input id="date_to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}">
+        <input id="date_to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}" class="{% if filters.date_to %}active-filter{% endif %}">
       </div>
       <div>
         <label for="manager">Менеджер</label>
@@ -535,6 +697,9 @@
                 <span>{{ manager.name }}</span>
               </label>
             {% endfor %}
+            <div class="multi-actions">
+              <button class="button primary" type="submit">Применить фильтр</button>
+            </div>
           </div>
         </details>
       </div>
@@ -549,12 +714,15 @@
                 <span>{{ direction.name }}</span>
               </label>
             {% endfor %}
+            <div class="multi-actions">
+              <button class="button primary" type="submit">Применить фильтр</button>
+            </div>
           </div>
         </details>
       </div>
       <div class="filter-actions">
         <label>&nbsp;</label>
-        <button class="button primary" type="submit">Применить</button>
+        <button class="button primary" type="submit">Применить период</button>
         <a class="button" href="/">Сбросить</a>
       </div>
     </form>
@@ -733,6 +901,7 @@
 
     const chartData = JSON.parse(document.getElementById("chart-data").textContent);
     const isDark = document.body.dataset.theme === "dark";
+    const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const colors = {
       target: "#e58a2a",
       zz: "#2f80ed",
@@ -787,7 +956,7 @@
           },
           elements: {
             line: { tension: 0.25, borderWidth: 3 },
-            point: { radius: 3, hoverRadius: 6 }
+            point: { radius: isMobile ? 2 : 3, hoverRadius: 6 }
           },
           plugins: {
             legend: { display: false },
@@ -805,7 +974,7 @@
               grid: { display: false },
               ticks: {
                 color: colors.muted,
-                maxTicksLimit: 12
+                maxTicksLimit: isMobile ? 6 : 12
               }
             },
             y: {
@@ -869,7 +1038,8 @@
                 autoSkip: false,
                 callback: function(value) {
                   const label = this.getLabelForValue(value);
-                  return label.length > 22 ? `${label.slice(0, 21)}...` : label;
+                  const limit = isMobile ? 14 : 22;
+                  return label.length > limit ? `${label.slice(0, limit - 1)}...` : label;
                 }
               }
             }

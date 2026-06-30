@@ -208,8 +208,8 @@ def _dashboard_context(request):
 
     selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
     selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
-    selected_manager_title = ", ".join(manager.name for manager in selected_managers) if selected_managers else "Все менеджеры"
-    selected_direction_title = ", ".join(direction.name for direction in selected_directions) if selected_directions else "Все направления"
+    selected_manager_title = _selection_title(selected_managers, "Все менеджеры")
+    selected_direction_title = _selection_title(selected_directions, "Все направления")
 
     if filters["selected_date"]:
         daily_rows = _hourly_rows_for_selected_date(filters)
@@ -338,6 +338,15 @@ def _dashboard_context(request):
         "show_details": show_details,
         "details": details,
     }
+
+
+def _selection_title(items, empty_title):
+    if not items:
+        return empty_title
+    first = items[0].name
+    if len(items) == 1:
+        return first
+    return f"{len(items)} выбрано: {first}"
 
 
 def _hourly_rows_for_selected_date(filters):
