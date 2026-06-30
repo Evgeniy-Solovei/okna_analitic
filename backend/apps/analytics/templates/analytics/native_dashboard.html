@@ -115,7 +115,13 @@
 
     .filters {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns:
+        minmax(150px, 1fr)
+        minmax(150px, 1fr)
+        minmax(150px, 0.9fr)
+        minmax(220px, 1.15fr)
+        minmax(220px, 1.15fr)
+        minmax(130px, 0.8fr);
       gap: 12px;
       padding: 16px;
       border: 1px solid var(--line);
@@ -196,7 +202,7 @@
       top: 44px;
       left: 0;
       right: 0;
-      max-height: 280px;
+      max-height: min(360px, calc(100vh - 220px));
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -208,7 +214,9 @@
     }
 
     .multi-options {
-      max-height: 210px;
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: 250px;
       overflow-y: auto;
       padding-right: 2px;
     }
@@ -244,11 +252,12 @@
     }
 
     .multi-actions {
+      flex-shrink: 0;
       display: grid;
       grid-template-columns: 1fr;
       gap: 8px;
-      margin: 8px -8px -8px;
-      padding: 8px;
+      margin-top: 8px;
+      padding-top: 8px;
       border-top: 1px solid var(--line);
       background: var(--panel);
     }
@@ -513,6 +522,7 @@
       text-align: center;
     }
 
+    .period-actions,
     .filter-actions {
       display: grid;
       gap: 8px;
@@ -598,6 +608,7 @@
         grid-template-columns: 1fr 1fr;
       }
 
+      .period-actions label,
       .filter-actions label {
         display: none;
       }
@@ -673,8 +684,8 @@
       }
 
       .multi-actions {
-        margin: 10px -10px -10px;
-        padding: 10px;
+        margin-top: 10px;
+        padding-top: 10px;
       }
 
       table {
@@ -745,6 +756,10 @@
         <label for="date_to">Дата по</label>
         <input id="date_to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}" class="{% if filters.date_to %}active-filter{% endif %}">
       </div>
+      <div class="period-actions">
+        <label>&nbsp;</label>
+        <button class="button primary" type="submit">Применить период</button>
+      </div>
       <div>
         <label for="manager">Менеджер</label>
         <details class="multi-select" id="manager">
@@ -787,7 +802,6 @@
       </div>
       <div class="filter-actions">
         <label>&nbsp;</label>
-        <button class="button primary" type="submit">Применить период</button>
         <a class="button" href="/">Сбросить</a>
       </div>
     </form>
