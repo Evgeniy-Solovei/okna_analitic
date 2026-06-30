@@ -197,12 +197,20 @@
       left: 0;
       right: 0;
       max-height: 280px;
-      overflow: auto;
-      padding: 8px 8px 58px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 8px;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #fff;
       box-shadow: 0 16px 36px rgba(23, 32, 51, 0.14);
+    }
+
+    .multi-options {
+      max-height: 210px;
+      overflow-y: auto;
+      padding-right: 2px;
     }
 
     .check-row {
@@ -236,12 +244,10 @@
     }
 
     .multi-actions {
-      position: sticky;
-      bottom: 0;
       display: grid;
       grid-template-columns: 1fr;
       gap: 8px;
-      margin: 8px -8px -58px;
+      margin: 8px -8px -8px;
       padding: 8px;
       border-top: 1px solid var(--line);
       background: var(--panel);
@@ -644,8 +650,12 @@
         right: 10px;
         bottom: 12px;
         max-height: min(460px, 74vh);
-        padding: 10px 10px 66px;
+        padding: 10px;
         border-radius: 10px;
+      }
+
+      .multi-options {
+        max-height: min(330px, calc(74vh - 86px));
       }
 
       .check-row {
@@ -663,7 +673,7 @@
       }
 
       .multi-actions {
-        margin: 10px -10px -66px;
+        margin: 10px -10px -10px;
         padding: 10px;
       }
 
@@ -740,13 +750,15 @@
         <details class="multi-select" id="manager">
           <summary>{{ selected_manager_title }}</summary>
           <div class="multi-menu">
-            <a class="check-row all-option" href="{{ manager_all_url }}">Все менеджеры</a>
-            {% for manager in managers %}
-              <label class="check-row">
-                <input type="checkbox" name="manager" value="{{ manager.id }}" {% if manager.id in filters.manager_ids %}checked{% endif %}>
-                <span>{{ manager.name }}</span>
-              </label>
-            {% endfor %}
+            <div class="multi-options">
+              <a class="check-row all-option" href="{{ manager_all_url }}">Все менеджеры</a>
+              {% for manager in managers %}
+                <label class="check-row">
+                  <input type="checkbox" name="manager" value="{{ manager.id }}" {% if manager.id in filters.manager_ids %}checked{% endif %}>
+                  <span>{{ manager.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
             <div class="multi-actions">
               <button class="button primary" type="submit">Применить фильтр</button>
             </div>
@@ -758,13 +770,15 @@
         <details class="multi-select" id="direction">
           <summary>{{ selected_direction_title }}</summary>
           <div class="multi-menu">
-            <a class="check-row all-option" href="{{ direction_all_url }}">Все направления</a>
-            {% for direction in directions %}
-              <label class="check-row">
-                <input type="checkbox" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
-                <span>{{ direction.name }}</span>
-              </label>
-            {% endfor %}
+            <div class="multi-options">
+              <a class="check-row all-option" href="{{ direction_all_url }}">Все направления</a>
+              {% for direction in directions %}
+                <label class="check-row">
+                  <input type="checkbox" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
+                  <span>{{ direction.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
             <div class="multi-actions">
               <button class="button primary" type="submit">Применить фильтр</button>
             </div>
