@@ -1006,6 +1006,15 @@
       });
     }
 
+    document.querySelectorAll(".multi-select").forEach(select => {
+      select.addEventListener("toggle", () => {
+        if (!select.open) return;
+        document.querySelectorAll(".multi-select[open]").forEach(openSelect => {
+          if (openSelect !== select) openSelect.open = false;
+        });
+      });
+    });
+
     function money(value) {
       return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
     }
