@@ -14,6 +14,7 @@ class BusinessDirection(TimestampedModel):
     class Code(models.TextChoices):
         PANORAMA = "panorama", "Панорама"
         RO = "ro", "РО"
+        B2B = "b2b", "B2B"
 
     code = models.CharField(max_length=32, choices=Code.choices, unique=True)
     name = models.CharField(max_length=128)

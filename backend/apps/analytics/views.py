@@ -185,11 +185,13 @@ def _dashboard_context(request):
     )
     for row in manager_rows:
         row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
+        row["avg_check"] = round(float(row["contract_amount"] or 0) / float(row["contracts"] or 0)) if row["contracts"] else 0
         row["url"] = _url_with(filters, manager=[row["manager_id"]])
 
     conversion_rows = sorted(manager_rows, key=lambda item: item["conversion"], reverse=True)
     conversion_rows = _bar_rows(conversion_rows, "conversion")
     amount_rows = _bar_rows(manager_rows.copy(), "contract_amount")
+    avg_check_rows = sorted(manager_rows, key=lambda item: item["avg_check"], reverse=True)
 
     direction_rows = list(
         qs.values("direction_id", "direction__name")
@@ -337,6 +339,8 @@ def _dashboard_context(request):
         "direction_all_url": direction_all_url,
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
+        "avg_check_rows": avg_check_rows,
+        "avg_check_overall": totals["avg_check"],
         "direction_rows": direction_rows,
         "daily_rows": daily_rows,
         "chart_data": chart_data,

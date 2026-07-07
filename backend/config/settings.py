@@ -117,10 +117,13 @@ BITRIX24 = {
     "TIMEOUT_SECONDS": int(os.getenv("BITRIX24_TIMEOUT_SECONDS", "30")),
     "PANORAMA_PIPELINE_ID": os.getenv("PANORAMA_PIPELINE_ID", ""),
     "RO_PIPELINE_ID": os.getenv("RO_PIPELINE_ID", ""),
+    "B2B_PIPELINE_ID": os.getenv("B2B_PIPELINE_ID", ""),
     "PANORAMA_ZZ_STAGE_ID": os.getenv("PANORAMA_ZZ_STAGE_ID", ""),
     "RO_ZZ_STAGE_ID": os.getenv("RO_ZZ_STAGE_ID", ""),
+    "B2B_ZZ_STAGE_ID": os.getenv("B2B_ZZ_STAGE_ID", ""),
     "PANORAMA_ZN_STAGE_ID": os.getenv("PANORAMA_ZN_STAGE_ID", ""),
     "RO_ZN_STAGE_ID": os.getenv("RO_ZN_STAGE_ID", ""),
+    "B2B_ZN_STAGE_ID": os.getenv("B2B_ZN_STAGE_ID", ""),
     "LEAD_DIRECTION_FIELD": os.getenv("LEAD_DIRECTION_FIELD", ""),
     "LEAD_PANORAMA_DIRECTION_VALUES": [
         value.strip().lower() for value in os.getenv("LEAD_PANORAMA_DIRECTION_VALUES", "Панорама,panorama").split(",") if value.strip()

@@ -44,6 +44,7 @@ class Command(BaseCommand):
         configured = [
             ("PANORAMA", settings.BITRIX24["PANORAMA_PIPELINE_ID"], settings.BITRIX24["PANORAMA_ZZ_STAGE_ID"]),
             ("RO", settings.BITRIX24["RO_PIPELINE_ID"], settings.BITRIX24["RO_ZZ_STAGE_ID"]),
+            ("B2B", settings.BITRIX24["B2B_PIPELINE_ID"], settings.BITRIX24["B2B_ZZ_STAGE_ID"]),
         ]
         for label, category_id, zz_stage_id in configured:
             statuses = client.call("crm.status.list", {"filter": {"ENTITY_ID": stage_entity_id(category_id)}}) or []

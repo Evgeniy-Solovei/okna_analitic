@@ -159,9 +159,11 @@ def sync_pipelines_and_stages(client: BitrixClient) -> dict[str, int]:
     stats = {"pipelines": 0, "stages": 0}
     panorama = BusinessDirection.objects.get(code=BusinessDirection.Code.PANORAMA)
     ro = BusinessDirection.objects.get(code=BusinessDirection.Code.RO)
+    b2b, _ = BusinessDirection.objects.get_or_create(code=BusinessDirection.Code.B2B, defaults={"name": "B2B", "is_active": True})
 
     panorama_pipeline_id = str(settings.BITRIX24["PANORAMA_PIPELINE_ID"])
     ro_pipeline_id = str(settings.BITRIX24["RO_PIPELINE_ID"])
+    b2b_pipeline_id = str(settings.BITRIX24["B2B_PIPELINE_ID"])
 
     for raw in client.list_all("crm.category.list", {"entityTypeId": 2}, result_key="categories"):
         bitrix_id = str(raw["id"])
@@ -170,11 +172,24 @@ def sync_pipelines_and_stages(client: BitrixClient) -> dict[str, int]:
             direction = panorama
         elif bitrix_id == ro_pipeline_id:
             direction = ro
+        elif bitrix_id == b2b_pipeline_id:
+            direction = b2b
         CrmPipeline.objects.update_or_create(
             bitrix_id=bitrix_id,
             defaults={"name": raw.get("name") or bitrix_id, "direction": direction, "raw": raw},
         )
         stats["pipelines"] += 1
+
+    zz_stage_ids = {
+        settings.BITRIX24["PANORAMA_ZZ_STAGE_ID"],
+        settings.BITRIX24["RO_ZZ_STAGE_ID"],
+        settings.BITRIX24["B2B_ZZ_STAGE_ID"],
+    }
+    zn_stage_ids = {
+        settings.BITRIX24["PANORAMA_ZN_STAGE_ID"],
+        settings.BITRIX24["RO_ZN_STAGE_ID"],
+        settings.BITRIX24["B2B_ZN_STAGE_ID"],
+    }
 
     for pipeline in CrmPipeline.objects.all():
         stage_entity_id = "DEAL_STAGE" if pipeline.bitrix_id == "0" else f"DEAL_STAGE_{pipeline.bitrix_id}"
@@ -187,14 +202,25 @@ def sync_pipelines_and_stages(client: BitrixClient) -> dict[str, int]:
                     "pipeline": pipeline,
                     "name": raw.get("NAME") or stage_id,
                     "sort": int(raw.get("SORT") or 0),
-                    "is_zz": stage_id in {settings.BITRIX24["PANORAMA_ZZ_STAGE_ID"], settings.BITRIX24["RO_ZZ_STAGE_ID"]},
-                    "is_zn": stage_id in {settings.BITRIX24["PANORAMA_ZN_STAGE_ID"], settings.BITRIX24["RO_ZN_STAGE_ID"]},
+                    "is_zz": stage_id in zz_stage_ids,
+                    "is_zn": stage_id in zn_stage_ids,
                     "is_success": raw.get("SEMANTICS") == "S",
                     "raw": raw,
                 },
             )
             stats["stages"] += 1
+
+    _sync_deal_directions_from_pipelines()
     return stats
+
+
+def _sync_deal_directions_from_pipelines() -> int:
+    updated = 0
+    for pipeline in CrmPipeline.objects.exclude(direction__isnull=True):
+        updated += CrmDeal.objects.filter(pipeline=pipeline).exclude(direction_id=pipeline.direction_id).update(
+            direction_id=pipeline.direction_id
+        )
+    return updated
 
 
 def sync_leads(client: BitrixClient, modified_from: str | None = None) -> int:

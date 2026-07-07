@@ -127,6 +127,8 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
+      position: relative;
+      z-index: 1;
     }
 
     label {
@@ -157,6 +159,11 @@
 
     .multi-select {
       position: relative;
+      z-index: 2;
+    }
+
+    .multi-select[open] {
+      z-index: 30;
     }
 
     .multi-select summary {
@@ -526,12 +533,35 @@
     .filter-actions {
       display: grid;
       gap: 8px;
+      align-self: end;
+    }
+
+    .period-actions .button,
+    .filter-actions .button {
+      width: 100%;
+    }
+
+    .summary-value {
+      margin-top: 8px;
+      font-size: 28px;
+      line-height: 1.15;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
     }
 
     @media (max-width: 1180px) {
       .filters {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .period-actions {
+        grid-column: 1 / -1;
+      }
+
+      .filter-actions {
+        grid-column: 1 / -1;
+      }
+
       .kpis {
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
@@ -550,7 +580,12 @@
       }
 
       .filters {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
+      }
+
+      .period-actions,
+      .filter-actions {
+        grid-column: auto;
       }
 
       .grid {
@@ -895,6 +930,40 @@
       </article>
     </section>
 
+    <section class="grid">
+      <article class="card">
+        <h2>Средний чек общий</h2>
+        <div class="summary-value">{{ avg_check_overall|floatformat:0 }}</div>
+      </article>
+
+      <article class="card wide table-card">
+        <h2>Средний чек по менеджерам</h2>
+        <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th>Менеджер</th>
+              <th>Договоры</th>
+              <th>Сумма договоров</th>
+              <th>Средний чек</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in avg_check_rows %}
+              <tr>
+                <td><strong>{{ row.manager__name }}</strong></td>
+                <td>{{ row.contracts }}</td>
+                <td>{{ row.contract_amount|floatformat:0 }}</td>
+                <td>{{ row.avg_check|floatformat:0 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="empty">Нет данных по менеджерам.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </article>
+    </section>
+
     {% comment %}
     Detail tables are disabled for now. Keep this block for the next iteration
     when drill-down lists for leads, deals, ZZ and contracts are finalized.
@@ -1088,9 +1157,43 @@
       });
     }
 
-    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value) {
+    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value, options = {}) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
+
+      const showBarLabels = options.showBarLabels ?? false;
+      const enableTooltip = options.enableTooltip ?? true;
+
+      const barLabelPlugin = {
+        id: "barValueLabels",
+        afterDatasetsDraw(chart) {
+          if (!showBarLabels) return;
+          const { ctx } = chart;
+          const dataset = chart.data.datasets[0];
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar, index) => {
+            const value = dataset.data[index];
+            const text = `${formatter(value)}${suffix}`;
+            const barStart = Math.min(bar.base, bar.x);
+            const barEnd = Math.max(bar.base, bar.x);
+            const barWidth = barEnd - barStart;
+            ctx.save();
+            ctx.font = "bold 11px Inter, sans-serif";
+            ctx.textBaseline = "middle";
+            if (barWidth >= 36) {
+              ctx.fillStyle = "#fff";
+              ctx.textAlign = "center";
+              ctx.fillText(text, barStart + barWidth / 2, bar.y);
+            } else {
+              ctx.fillStyle = colors.text;
+              ctx.textAlign = "left";
+              ctx.fillText(text, barEnd + 6, bar.y);
+            }
+            ctx.restore();
+          });
+        }
+      };
+
       new Chart(canvas, {
         type: "bar",
         data: {
@@ -1104,10 +1207,14 @@
             barThickness: 18
           }]
         },
+        plugins: showBarLabels ? [barLabelPlugin] : [],
         options: {
           indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: { right: showBarLabels ? 48 : 0 }
+          },
           onClick: openItem,
           onHover: (event, items) => {
             event.native.target.style.cursor = items.length ? "pointer" : "default";
@@ -1115,6 +1222,7 @@
           plugins: {
             legend: { display: false },
             tooltip: {
+              enabled: enableTooltip,
               callbacks: {
                 label: item => `${formatter(item.raw)}${suffix}`
               }
@@ -1148,7 +1256,10 @@
 
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
-      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
+      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1), {
+        showBarLabels: true,
+        enableTooltip: false
+      });
       drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
     }
 
