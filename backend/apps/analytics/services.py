@@ -159,7 +159,6 @@ def sync_pipelines_and_stages(client: BitrixClient) -> dict[str, int]:
     stats = {"pipelines": 0, "stages": 0}
     panorama = BusinessDirection.objects.get(code=BusinessDirection.Code.PANORAMA)
     ro = BusinessDirection.objects.get(code=BusinessDirection.Code.RO)
-    b2b, _ = BusinessDirection.objects.get_or_create(code=BusinessDirection.Code.B2B, defaults={"name": "B2B", "is_active": True})
 
     panorama_pipeline_id = str(settings.BITRIX24["PANORAMA_PIPELINE_ID"])
     ro_pipeline_id = str(settings.BITRIX24["RO_PIPELINE_ID"])
@@ -173,7 +172,7 @@ def sync_pipelines_and_stages(client: BitrixClient) -> dict[str, int]:
         elif bitrix_id == ro_pipeline_id:
             direction = ro
         elif bitrix_id == b2b_pipeline_id:
-            direction = b2b
+            direction = panorama
         CrmPipeline.objects.update_or_create(
             bitrix_id=bitrix_id,
             defaults={"name": raw.get("name") or bitrix_id, "direction": direction, "raw": raw},
@@ -221,6 +220,44 @@ def _sync_deal_directions_from_pipelines() -> int:
             direction_id=pipeline.direction_id
         )
     return updated
+
+
+def ensure_b2b_integrity() -> bool:
+    b2b_pipeline_id = settings.BITRIX24.get("B2B_PIPELINE_ID")
+    panorama = BusinessDirection.objects.filter(code=BusinessDirection.Code.PANORAMA).first()
+    if not b2b_pipeline_id or not panorama:
+        return False
+
+    pipeline = CrmPipeline.objects.filter(bitrix_id=str(b2b_pipeline_id)).first()
+    if not pipeline:
+        return False
+
+    changed = False
+    if pipeline.direction_id != panorama.id:
+        pipeline.direction = panorama
+        pipeline.save(update_fields=["direction", "updated_at"])
+        changed = True
+
+    updated_deals = CrmDeal.objects.filter(pipeline=pipeline).exclude(direction_id=panorama.id).update(
+        direction_id=panorama.id
+    )
+    if updated_deals:
+        changed = True
+
+    b2b_direction = BusinessDirection.objects.filter(code=BusinessDirection.Code.B2B).first()
+    if b2b_direction:
+        migrated = CrmDeal.objects.filter(direction=b2b_direction).update(direction_id=panorama.id)
+        if migrated:
+            changed = True
+        if ManagerDailyMetric.objects.filter(direction=b2b_direction).exists():
+            changed = True
+        if b2b_direction.is_active:
+            b2b_direction.is_active = False
+            b2b_direction.save(update_fields=["is_active", "updated_at"])
+
+    if changed:
+        rebuild_manager_daily_metrics()
+    return changed
 
 
 def sync_leads(client: BitrixClient, modified_from: str | None = None) -> int:

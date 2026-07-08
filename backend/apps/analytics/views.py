@@ -13,7 +13,14 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric
-from .services import bitrix_datetime, get_sync_cursor, parse_bitrix_datetime, run_bitrix24_sync, set_sync_cursor
+from .services import (
+    bitrix_datetime,
+    ensure_b2b_integrity,
+    get_sync_cursor,
+    parse_bitrix_datetime,
+    run_bitrix24_sync,
+    set_sync_cursor,
+)
 
 
 SYNC_LOCK_ID = 24062026
@@ -111,7 +118,7 @@ def _url_with(filters, **overrides):
     return "?" + urlencode(params, doseq=True)
 
 
-def _metric_queryset(request):
+def _base_metric_queryset(request):
     qs = ManagerDailyMetric.objects.select_related("manager", "direction")
     date_from = _parse_date_param(request.GET.get("date_from"))
     date_to = _parse_date_param(request.GET.get("date_to"))
@@ -133,9 +140,7 @@ def _metric_queryset(request):
             qs = qs.filter(metric_date__lte=date_to)
     if manager_ids:
         qs = qs.filter(manager_id__in=manager_ids)
-    if direction_ids:
-        qs = qs.filter(direction_id__in=direction_ids)
-    return qs, {
+    filters = {
         "date_from": date_from,
         "date_to": date_to,
         "selected_date": selected_date,
@@ -143,6 +148,14 @@ def _metric_queryset(request):
         "direction_ids": direction_ids,
         "detail": detail,
     }
+    return qs, filters
+
+
+def _metric_queryset(request):
+    qs, filters = _base_metric_queryset(request)
+    if filters["direction_ids"]:
+        qs = qs.filter(direction_id__in=filters["direction_ids"])
+    return qs, filters
 
 
 def _sum_metrics(qs):
@@ -160,6 +173,115 @@ def _sum_metrics(qs):
     return totals
 
 
+def _enrich_metric_row(row):
+    row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
+    row["avg_check"] = round(float(row["contract_amount"] or 0) / float(row["contracts"] or 0)) if row["contracts"] else 0
+    return row
+
+
+def _manager_rows(qs, filters):
+    rows = list(
+        qs.values("manager_id", "manager__name")
+        .annotate(
+            leads=Sum("leads"),
+            target_leads=Sum("target_leads"),
+            zz=Sum("zz"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        .order_by("-contract_amount", "manager__name")
+    )
+    for row in rows:
+        _enrich_metric_row(row)
+        row["url"] = _url_with(filters, manager=[row["manager_id"]])
+    return rows
+
+
+def _direction_table_rows(qs, filters):
+    rows = []
+    direction_ids = filters["direction_ids"]
+    active_directions = BusinessDirection.objects.filter(is_active=True).exclude(code=BusinessDirection.Code.B2B)
+
+    def include_direction(direction):
+        if not direction_ids:
+            return True
+        return direction.id in direction_ids
+
+    for direction in active_directions.order_by("name"):
+        if not include_direction(direction):
+            continue
+
+        direction_qs = qs.filter(direction_id=direction.id)
+        if direction.code == BusinessDirection.Code.PANORAMA:
+            manager_rows = list(
+                direction_qs.values("manager_id", "manager__name")
+                .annotate(
+                    leads=Sum("leads"),
+                    target_leads=Sum("target_leads"),
+                    zz=Sum("zz"),
+                    contracts=Sum("contracts"),
+                    contract_amount=Sum("contract_amount"),
+                )
+                .order_by("manager__name")
+            )
+            for row in manager_rows:
+                if not any(row.get(key) for key in ("leads", "target_leads", "zz", "contracts", "contract_amount")):
+                    continue
+                _enrich_metric_row(row)
+                rows.append(
+                    {
+                        "row_type": "manager",
+                        "label": row["manager__name"],
+                        "leads": row["leads"] or 0,
+                        "target_leads": row["target_leads"] or 0,
+                        "zz": row["zz"] or 0,
+                        "conversion": row["conversion"],
+                        "contracts": row["contracts"] or 0,
+                        "contract_amount": row["contract_amount"] or 0,
+                        "avg_check": row["avg_check"],
+                    }
+                )
+
+        totals = direction_qs.aggregate(
+            leads=Sum("leads"),
+            target_leads=Sum("target_leads"),
+            zz=Sum("zz"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        total_row = {
+            "row_type": "direction_total",
+            "label": direction.name,
+            "leads": totals["leads"] or 0,
+            "target_leads": totals["target_leads"] or 0,
+            "zz": totals["zz"] or 0,
+            "contracts": totals["contracts"] or 0,
+            "contract_amount": totals["contract_amount"] or 0,
+        }
+        _enrich_metric_row(total_row)
+        if not any(total_row[key] for key in ("leads", "target_leads", "zz", "contracts", "contract_amount")):
+            continue
+        rows.append(total_row)
+
+    return rows
+
+
+def _daily_rows(qs, filters):
+    rows = list(
+        qs.values("metric_date")
+        .annotate(
+            target_leads=Sum("target_leads"),
+            zz=Sum("zz"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        .order_by("metric_date")
+    )
+    for row in rows:
+        row["url"] = _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None)
+    return rows
+
+
 def _bar_rows(rows, value_key, max_width=100):
     max_value = max([float(row[value_key] or 0) for row in rows] or [0])
     for row in rows:
@@ -171,42 +293,12 @@ def _bar_rows(rows, value_key, max_width=100):
 def _dashboard_context(request):
     qs, filters = _metric_queryset(request)
     totals = _sum_metrics(qs)
-
-    manager_rows = list(
-        qs.values("manager_id", "manager__name")
-        .annotate(
-            leads=Sum("leads"),
-            target_leads=Sum("target_leads"),
-            zz=Sum("zz"),
-            contracts=Sum("contracts"),
-            contract_amount=Sum("contract_amount"),
-        )
-        .order_by("-contract_amount", "manager__name")
-    )
-    for row in manager_rows:
-        row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
-        row["avg_check"] = round(float(row["contract_amount"] or 0) / float(row["contracts"] or 0)) if row["contracts"] else 0
-        row["url"] = _url_with(filters, manager=[row["manager_id"]])
+    manager_rows = _manager_rows(qs, filters)
 
     conversion_rows = sorted(manager_rows, key=lambda item: item["conversion"], reverse=True)
     conversion_rows = _bar_rows(conversion_rows, "conversion")
     amount_rows = _bar_rows(manager_rows.copy(), "contract_amount")
-    avg_check_rows = sorted(manager_rows, key=lambda item: item["avg_check"], reverse=True)
-
-    direction_rows = list(
-        qs.values("direction_id", "direction__name")
-        .annotate(
-            leads=Sum("leads"),
-            target_leads=Sum("target_leads"),
-            zz=Sum("zz"),
-            contracts=Sum("contracts"),
-            contract_amount=Sum("contract_amount"),
-        )
-        .order_by("direction__name")
-    )
-    for row in direction_rows:
-        row["conversion"] = round(float(row["zz"] or 0) * 100 / float(row["target_leads"] or 0), 1) if row["target_leads"] else 0
-        row["url"] = _url_with(filters, direction=[row["direction_id"]])
+    direction_table_rows = _direction_table_rows(qs, filters)
 
     selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
     selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
@@ -216,11 +308,7 @@ def _dashboard_context(request):
     if filters["selected_date"]:
         daily_rows = _hourly_rows_for_selected_date(filters)
     else:
-        daily_rows = list(
-            qs.values("metric_date")
-            .annotate(target_leads=Sum("target_leads"), zz=Sum("zz"), contracts=Sum("contracts"), contract_amount=Sum("contract_amount"))
-            .order_by("metric_date")
-        )
+        daily_rows = _daily_rows(qs, filters)
     daily_max = max([row["target_leads"] or 0 for row in daily_rows] + [row["zz"] or 0 for row in daily_rows] + [row["contracts"] or 0 for row in daily_rows] + [1])
     for row in daily_rows:
         row["target_height"] = round((row["target_leads"] or 0) / daily_max * 140, 2)
@@ -329,8 +417,11 @@ def _dashboard_context(request):
             id__in=ManagerDailyMetric.objects.values_list("manager_id", flat=True).distinct()
         ).order_by("name"),
         "directions": BusinessDirection.objects.filter(
-            id__in=ManagerDailyMetric.objects.values_list("direction_id", flat=True).distinct()
-        ).order_by("name"),
+            is_active=True,
+            id__in=ManagerDailyMetric.objects.values_list("direction_id", flat=True).distinct(),
+        )
+        .exclude(code=BusinessDirection.Code.B2B)
+        .order_by("name"),
         "selected_managers": selected_managers,
         "selected_directions": selected_directions,
         "selected_manager_title": selected_manager_title,
@@ -339,9 +430,7 @@ def _dashboard_context(request):
         "direction_all_url": direction_all_url,
         "conversion_rows": conversion_rows,
         "amount_rows": amount_rows,
-        "avg_check_rows": avg_check_rows,
-        "avg_check_overall": totals["avg_check"],
-        "direction_rows": direction_rows,
+        "direction_table_rows": direction_table_rows,
         "daily_rows": daily_rows,
         "chart_data": chart_data,
         "details_enabled": details_enabled,
@@ -412,6 +501,7 @@ def _hourly_rows_for_selected_date(filters):
 
 @login_required
 def dashboard_entry(request):
+    ensure_b2b_integrity()
     force_sync = request.GET.get("force") == "1"
     if force_sync or not request.GET:
         _on_demand_sync_if_needed(force=force_sync)

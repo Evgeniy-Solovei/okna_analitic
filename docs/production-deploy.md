@@ -93,10 +93,16 @@ docker compose up -d --build postgres redis
 docker compose up -d --build django celery celery-beat metabase caddy
 ```
 
-Миграции:
+При старте контейнера `django` автоматически выполняются:
+
+- `python manage.py migrate --noinput`
+- проверка и починка направления B2B (`ensure_b2b_integrity`)
+
+Отдельно миграции после каждого деплоя запускать не нужно, если пересобран и перезапущен контейнер `django`.
+
+Первый пользователь для входа в дашборд:
 
 ```bash
-docker compose exec django python manage.py migrate
 docker compose exec django python manage.py createsuperuser
 ```
 
@@ -201,8 +207,9 @@ https://platform.oknapanorama.by/
 
 ```bash
 docker compose up -d --build django celery celery-beat metabase caddy
-docker compose exec django python manage.py migrate
 ```
+
+Миграции применятся автоматически при старте `django`.
 
 Создать обычного пользователя для клиента в Django:
 

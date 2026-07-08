@@ -516,6 +516,17 @@
       background: var(--soft);
     }
 
+    .metric-table tr.direction-total td {
+      font-weight: 800;
+      background: var(--soft);
+      border-top: 2px solid var(--line);
+    }
+
+    .metric-table tr.manager-row td:first-child {
+      padding-left: 22px;
+      font-weight: 650;
+    }
+
     th {
       color: var(--muted);
       font-size: 12px;
@@ -539,14 +550,6 @@
     .period-actions .button,
     .filter-actions .button {
       width: 100%;
-    }
-
-    .summary-value {
-      margin-top: 8px;
-      font-size: 28px;
-      line-height: 1.15;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
     }
 
     @media (max-width: 1180px) {
@@ -902,62 +905,30 @@
         <table class="metric-table">
           <thead>
             <tr>
-              <th>Направление</th>
+              <th>Направление / менеджер</th>
               <th>Лиды</th>
               <th>ЦЛ</th>
               <th>ЗЗ</th>
               <th>Конверсия, %</th>
               <th>Договоры</th>
               <th>Сумма договоров</th>
+              <th>Средний чек</th>
             </tr>
           </thead>
           <tbody>
-            {% for row in direction_rows %}
-              <tr>
-                <td><strong>{{ row.direction__name }}</strong></td>
+            {% for row in direction_table_rows %}
+              <tr class="{% if row.row_type == 'direction_total' %}direction-total{% else %}manager-row{% endif %}">
+                <td><strong>{{ row.label }}</strong></td>
                 <td>{{ row.leads }}</td>
                 <td>{{ row.target_leads }}</td>
                 <td>{{ row.zz }}</td>
                 <td>{{ row.conversion }}</td>
                 <td>{{ row.contracts }}</td>
-                <td>{{ row.contract_amount }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="7" class="empty">Нет данных по направлениям.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </article>
-    </section>
-
-    <section class="grid">
-      <article class="card">
-        <h2>Средний чек общий</h2>
-        <div class="summary-value">{{ avg_check_overall|floatformat:0 }}</div>
-      </article>
-
-      <article class="card wide table-card">
-        <h2>Средний чек по менеджерам</h2>
-        <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
-        <table class="metric-table">
-          <thead>
-            <tr>
-              <th>Менеджер</th>
-              <th>Договоры</th>
-              <th>Сумма договоров</th>
-              <th>Средний чек</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in avg_check_rows %}
-              <tr>
-                <td><strong>{{ row.manager__name }}</strong></td>
-                <td>{{ row.contracts }}</td>
                 <td>{{ row.contract_amount|floatformat:0 }}</td>
                 <td>{{ row.avg_check|floatformat:0 }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="4" class="empty">Нет данных по менеджерам.</td></tr>
+              <tr><td colspan="8" class="empty">Нет данных по направлениям.</td></tr>
             {% endfor %}
           </tbody>
         </table>
