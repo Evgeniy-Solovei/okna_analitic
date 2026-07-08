@@ -57,7 +57,7 @@ DROP VIEW IF EXISTS bi_manager_daily_metrics;
 def seed_directions(apps, _schema_editor):
     BusinessDirection = apps.get_model("analytics", "BusinessDirection")
     BusinessDirection.objects.update_or_create(code="panorama", defaults={"name": "Панорама", "is_active": True})
-    BusinessDirection.objects.update_or_create(code="ro", defaults={"name": "РО", "is_active": True})
+    BusinessDirection.objects.update_or_create(code="ro", defaults={"name": "Русские окна", "is_active": True})
 
 
 class Migration(migrations.Migration):

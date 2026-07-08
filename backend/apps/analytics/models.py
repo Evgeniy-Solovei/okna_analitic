@@ -13,7 +13,7 @@ class TimestampedModel(models.Model):
 class BusinessDirection(TimestampedModel):
     class Code(models.TextChoices):
         PANORAMA = "panorama", "Панорама"
-        RO = "ro", "РО"
+        RO = "ro", "Русские окна"
         B2B = "b2b", "B2B"
 
     code = models.CharField(max_length=32, choices=Code.choices, unique=True)
