@@ -8,7 +8,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -78,27 +77,6 @@ services:
       redis:
         condition: service_started
 
-  metabase:
-    image: metabase/metabase:latest
-    restart: unless-stopped
-    environment:
-      MB_DB_TYPE: postgres
-      MB_DB_DBNAME: ${POSTGRES_DB:-panorama_analytics}
-      MB_DB_PORT: 5432
-      MB_DB_USER: ${POSTGRES_USER:-panorama}
-      MB_DB_PASS: ${POSTGRES_PASSWORD:-change-me}
-      MB_DB_HOST: postgres
-      MB_SITE_LOCALE: ru
-      MB_SITE_URL: ${METABASE_SITE_URL:-https://platform.oknapanorama.by}
-      MB_ENABLE_EMBEDDING: ${MB_ENABLE_EMBEDDING:-false}
-      MB_EMBEDDING_SECRET_KEY: ${METABASE_EMBEDDING_SECRET_KEY:-}
-      MB_ANON_TRACKING_ENABLED: "false"
-    ports:
-      - "127.0.0.1:3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -114,8 +92,6 @@ services:
       - caddy_config:/config
     depends_on:
       django:
-        condition: service_started
-      metabase:
         condition: service_started
 
 volumes:

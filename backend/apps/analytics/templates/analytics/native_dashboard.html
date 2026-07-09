@@ -656,10 +656,27 @@
         gap: 10px;
       }
 
-      .kpi {
-        min-height: 82px;
-        padding: 12px;
-      }
+    .kpi {
+      min-height: 82px;
+      padding: 12px;
+    }
+
+    a.kpi {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    a.kpi:hover {
+      box-shadow: 0 4px 14px rgba(47, 128, 237, 0.15);
+      transform: translateY(-1px);
+    }
+
+    a.kpi.active {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.15);
+    }
 
       .kpi-value {
         font-size: 22px;
@@ -774,9 +791,13 @@
       <div class="subtitle">Окна Панорама: данные Bitrix24 обновляются автоматически</div>
     </div>
     <nav class="actions" aria-label="Действия">
-      <a class="button primary" href="/?force=1">Обновить данные</a>
+      {% if can_force_sync %}
+        <a class="button primary" href="/?force=1">Обновить данные</a>
+      {% endif %}
       <button class="button" type="button" id="themeToggle">Тема</button>
-      <a class="button" href="https://platform.oknapanorama.by/dashboard/2" target="_blank" rel="noreferrer">Metabase</a>
+      {% if show_admin_link %}
+        <a class="button" href="/admin/">Админка</a>
+      {% endif %}
       <form class="logout-form" method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <button class="button" type="submit">Выйти</button>
@@ -798,6 +819,7 @@
         <label>&nbsp;</label>
         <button class="button primary" type="submit">Применить период</button>
       </div>
+      {% if not is_manager_only %}
       <div>
         <label for="manager">Менеджер</label>
         <details class="multi-select" id="manager">
@@ -818,6 +840,27 @@
           </div>
         </details>
       </div>
+      <div>
+        <label for="exclude_manager">Исключить</label>
+        <details class="multi-select" id="exclude_manager">
+          <summary>{{ excluded_manager_title }}</summary>
+          <div class="multi-menu">
+            <div class="multi-options">
+              <a class="check-row all-option" href="{{ exclude_all_url }}">Никого не исключать</a>
+              {% for manager in managers %}
+                <label class="check-row">
+                  <input type="checkbox" name="exclude_manager" value="{{ manager.id }}" {% if manager.id in filters.exclude_manager_ids %}checked{% endif %}>
+                  <span>{{ manager.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            <div class="multi-actions">
+              <button class="button primary" type="submit">Применить</button>
+            </div>
+          </div>
+        </details>
+      </div>
+      {% endif %}
       <div>
         <label for="direction">Направление</label>
         <details class="multi-select" id="direction">
@@ -845,17 +888,13 @@
     </form>
 
     <section class="kpis" aria-label="Показатели">
-      {% comment %}
-      KPI drill-down will be restored later when the detail tables are finalized:
-      leads, target_leads, zz, conversion, contracts, avg_check, contract_amount.
-      {% endcomment %}
-      <article class="kpi"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></article>
-      <article class="kpi"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></article>
-      <article class="kpi"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></article>
-      <article class="kpi"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></article>
-      <article class="kpi"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></article>
-      <article class="kpi"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></article>
-      <article class="kpi"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></article>
+      <a class="kpi card {% if filters.detail == 'leads' %}active{% endif %}" href="{{ kpi_urls.leads }}"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></a>
+      <a class="kpi card {% if filters.detail == 'target_leads' %}active{% endif %}" href="{{ kpi_urls.target_leads }}"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></a>
+      <a class="kpi card {% if filters.detail == 'zz' %}active{% endif %}" href="{{ kpi_urls.zz }}"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></a>
+      <a class="kpi card {% if filters.detail == 'conversion' %}active{% endif %}" href="{{ kpi_urls.conversion }}"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></a>
+      <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.contracts }}"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></a>
+      <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.avg_check }}"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></a>
+      <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.contract_amount }}"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></a>
     </section>
 
     <section class="grid">
@@ -894,6 +933,41 @@
           </div>
         {% else %}
           <div class="empty">Нет данных.</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>ЦЛ по менеджерам</h2>
+        {% if target_rows %}
+          <div class="chart-box small">
+            <canvas id="targetChart" aria-label="ЦЛ по менеджерам"></canvas>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Конверсия по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box">
+            <canvas id="dailyConversionChart" aria-label="Конверсия по дням"></canvas>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+
+      <article class="card wide">
+        <h2>Сумма договоров по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box">
+            <canvas id="dailyAmountChart" aria-label="Сумма договоров по дням"></canvas>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
         {% endif %}
       </article>
     </section>
@@ -935,10 +1009,6 @@
       </article>
     </section>
 
-    {% comment %}
-    Detail tables are disabled for now. Keep this block for the next iteration
-    when drill-down lists for leads, deals, ZZ and contracts are finalized.
-
     {% if details_enabled %}
       <section class="details-title">
         <h2>
@@ -947,6 +1017,7 @@
             {% for manager in selected_managers %}{{ manager.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
           {% endif %}
           {% if filters.selected_date %} за {{ filters.selected_date|date:'d.m.Y' }}{% endif %}
+          <a class="button" href="{{ detail_close_url }}" style="margin-left:12px;font-size:13px;">Закрыть</a>
         </h2>
       </section>
 
@@ -986,7 +1057,7 @@
         {% endif %}
 
         {% if show_details.zz %}
-        <article class="card table-card">
+        <article class="card table-card wide">
           <h2>ЗЗ</h2>
           <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
@@ -1003,7 +1074,7 @@
         {% endif %}
 
         {% if show_details.contracts %}
-        <article class="card table-card">
+        <article class="card table-card wide">
           <h2>Договоры</h2>
           <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
@@ -1020,7 +1091,6 @@
         {% endif %}
       </section>
     {% endif %}
-    {% endcomment %}
   </main>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   {{ chart_data|json_script:"chart-data" }}
@@ -1225,12 +1295,57 @@
       });
     }
 
+    function drawSingleLineChart(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !rows.length || !window.Chart) return;
+      new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: rows.map(row => row.label),
+          datasets: [{
+            label: "",
+            data: rows.map(row => row[valueKey]),
+            rows,
+            borderColor: color,
+            backgroundColor: color,
+            tension: 0.25,
+            borderWidth: 3,
+            pointRadius: isMobile ? 2 : 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: openItem,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: item => `${formatter(item.raw)}${suffix}`
+              }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
+            y: {
+              beginAtZero: true,
+              grid: { color: colors.grid },
+              ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` }
+            }
+          }
+        }
+      });
+    }
+
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
+      drawSingleLineChart("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
+      drawSingleLineChart("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
       drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1), {
         showBarLabels: true,
         enableTooltip: false
       });
+      drawHorizontalBars("targetChart", chartData.target_leads, colors.target, "", money);
       drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
     }
 

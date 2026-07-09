@@ -25,13 +25,11 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-METABASE_DASHBOARD_PATH = os.getenv("METABASE_DASHBOARD_PATH", "/dashboard/5")
-METABASE_EMBEDDING_SECRET_KEY = os.getenv("METABASE_EMBEDDING_SECRET_KEY", "")
-METABASE_EMBEDDING_DASHBOARD_ID = os.getenv("METABASE_EMBEDDING_DASHBOARD_ID", "")
 ON_DEMAND_SYNC_ENABLED = env_bool("ON_DEMAND_SYNC_ENABLED", True)
 ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS = int(os.getenv("ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS", "60"))
 
 INSTALLED_APPS = [
+    "jazzmin",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -133,4 +131,38 @@ BITRIX24 = {
     ],
     "DEAL_CONTRACT_DATE_FIELD": os.getenv("DEAL_CONTRACT_DATE_FIELD", ""),
     "DEAL_CONTRACT_AMOUNT_FIELD": os.getenv("DEAL_CONTRACT_AMOUNT_FIELD", "OPPORTUNITY"),
+}
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Панорама Analytics",
+    "site_header": "Окна Панорама",
+    "site_brand": "Analytics Admin",
+    "welcome_sign": "Администрирование дашборда",
+    "copyright": "JS Global",
+    "search_model": ["auth.User", "analytics.CrmUser"],
+    "topmenu_links": [
+        {"name": "Дашборд", "url": "/", "new_window": False},
+    ],
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "order_with_respect_to": ["analytics", "auth"],
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.group": "fas fa-users",
+        "analytics.CrmDeal": "fas fa-handshake",
+        "analytics.CrmLead": "fas fa-inbox",
+        "analytics.ManagerDailyMetric": "fas fa-chart-bar",
+        "analytics.SyncRun": "fas fa-sync",
+    },
+    "language_chooser": False,
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "theme": "flatly",
+    "dark_mode_theme": "darkly",
+    "navbar": "navbar-white navbar-light",
+    "sidebar": "sidebar-dark-primary",
+    "brand_colour": "navbar-primary",
 }

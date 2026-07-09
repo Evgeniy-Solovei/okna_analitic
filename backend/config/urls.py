@@ -10,7 +10,7 @@ def health(_request):
 
 
 urlpatterns = [
-    path("", dashboard_entry),
+    path("", dashboard_entry, name="dashboard"),
     path("accounts/", include("django.contrib.auth.urls")),
     path("refresh/", refresh_status),
     path("admin/", admin.site.urls),

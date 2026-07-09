@@ -1,10 +1,6 @@
 {$APP_DOMAIN:platform.oknapanorama.by} {
     encode zstd gzip
 
-    handle / {
-        reverse_proxy django:8000
-    }
-
     handle /health/* {
         reverse_proxy django:8000
     }
@@ -21,25 +17,7 @@
         reverse_proxy django:8000
     }
 
-    handle /metabase {
-        redir /dashboard/2 302
+    handle {
+        reverse_proxy django:8000
     }
-
-    handle /question/* {
-        respond "Not found" 404
-    }
-
-    handle /collection/* {
-        respond "Not found" 404
-    }
-
-    handle /browse/* {
-        respond "Not found" 404
-    }
-
-    handle /model/* {
-        respond "Not found" 404
-    }
-
-    reverse_proxy metabase:3000
 }

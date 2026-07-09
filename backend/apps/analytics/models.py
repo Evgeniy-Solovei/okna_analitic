@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -229,4 +230,29 @@ class SyncCursor(TimestampedModel):
 
     class Meta:
         db_table = "sync_cursors"
+
+
+class DashboardUserProfile(models.Model):
+    """Связь Django-пользователя с менеджером из Bitrix для ролевого доступа."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="dashboard_profile",
+    )
+    crm_user = models.ForeignKey(
+        CrmUser,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        verbose_name="Менеджер Bitrix",
+    )
+
+    class Meta:
+        db_table = "dashboard_user_profiles"
+        verbose_name = "Профиль дашборда"
+        verbose_name_plural = "Профили дашборда"
+
+    def __str__(self):
+        return f"{self.user.username} → {self.crm_user or '—'}"
 

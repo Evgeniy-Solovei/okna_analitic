@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 
 from .models import (
     BusinessDirection,
@@ -7,12 +9,35 @@ from .models import (
     CrmPipeline,
     CrmStage,
     CrmUser,
+    DashboardUserProfile,
     DealFirstZZ,
     DealStageEvent,
     ManagerDailyMetric,
     SyncCursor,
     SyncRun,
 )
+
+
+class DashboardUserProfileInline(admin.StackedInline):
+    model = DashboardUserProfile
+    can_delete = False
+    extra = 0
+    autocomplete_fields = ("crm_user",)
+
+
+class UserAdmin(BaseUserAdmin):
+    inlines = [DashboardUserProfileInline]
+
+
+admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
+
+
+@admin.register(DashboardUserProfile)
+class DashboardUserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "crm_user")
+    search_fields = ("user__username", "user__email", "crm_user__name")
+    autocomplete_fields = ("user", "crm_user")
 
 
 @admin.register(BusinessDirection)
@@ -79,9 +104,9 @@ class ManagerDailyMetricAdmin(admin.ModelAdmin):
 class SyncRunAdmin(admin.ModelAdmin):
     list_display = ("source", "status", "started_at", "finished_at")
     list_filter = ("source", "status")
+    readonly_fields = ("stats", "error")
 
 
 @admin.register(SyncCursor)
 class SyncCursorAdmin(admin.ModelAdmin):
     list_display = ("name", "value", "updated_at")
-
