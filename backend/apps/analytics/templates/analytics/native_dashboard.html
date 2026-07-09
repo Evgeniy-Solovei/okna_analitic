@@ -1338,7 +1338,7 @@
       });
     }
 
-    function drawVerticalBars(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
+    function drawLineWithBars(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
 
@@ -1371,17 +1371,34 @@
       };
 
       new Chart(canvas, {
-        type: "bar",
+        type: "line",
         data: {
           labels: rows.map(row => row.label),
-          datasets: [{
-            label: "",
-            data: rows.map(row => row[valueKey]),
-            rows,
-            backgroundColor: color,
-            borderRadius: 5,
-            maxBarThickness: 42
-          }]
+          datasets: [
+            {
+              type: "bar",
+              label: "",
+              data: rows.map(row => row[valueKey]),
+              rows,
+              backgroundColor: `${color}55`,
+              borderRadius: 4,
+              maxBarThickness: 28,
+              order: 2
+            },
+            {
+              type: "line",
+              label: "",
+              data: rows.map(row => row[valueKey]),
+              rows,
+              borderColor: color,
+              backgroundColor: color,
+              tension: 0.25,
+              borderWidth: 3,
+              pointRadius: isMobile ? 2 : 3,
+              pointHoverRadius: 6,
+              order: 1
+            }
+          ]
         },
         plugins: [barLabelPlugin],
         options: {
@@ -1392,9 +1409,14 @@
           onHover: (event, items) => {
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
+          elements: {
+            line: { tension: 0.25, borderWidth: 3 },
+            point: { radius: isMobile ? 2 : 3, hoverRadius: 6 }
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
+              filter: item => item.datasetIndex === 1,
               callbacks: {
                 title: items => {
                   const row = rows[items[0].dataIndex];
@@ -1427,8 +1449,8 @@
 
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
-      drawVerticalBars("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
-      drawVerticalBars("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
+      drawLineWithBars("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
+      drawLineWithBars("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
       drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
       drawHorizontalBars("targetChart", chartData.target_leads, colors.target, "", money);
       drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
