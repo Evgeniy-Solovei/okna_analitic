@@ -1199,7 +1199,7 @@
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
 
-      const showBarLabels = options.showBarLabels ?? false;
+      const showBarLabels = options.showBarLabels ?? true;
       const enableTooltip = options.enableTooltip ?? true;
 
       const barLabelPlugin = {
@@ -1232,6 +1232,46 @@
         }
       };
 
+      const axisLabelHoverPlugin = {
+        id: "axisLabelHover",
+        afterEvent(chart, args) {
+          if (!enableTooltip) return;
+          const event = args.event;
+          if (event.type !== "mousemove" && event.type !== "mouseout") return;
+
+          const { chartArea } = chart;
+          if (!chartArea) return;
+
+          const inNameArea = event.x < chartArea.left
+            && event.y >= chartArea.top
+            && event.y <= chartArea.bottom;
+
+          if (event.type === "mouseout" || !inNameArea) {
+            if (chart._axisLabelActive) {
+              chart._axisLabelActive = false;
+              chart._axisLabelActiveIndex = null;
+              chart.setActiveElements([]);
+              chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+              chart.update("none");
+            }
+            return;
+          }
+
+          const yScale = chart.scales.y;
+          const index = yScale.getValueForPixel(event.y);
+          if (index == null || index < 0 || index >= rows.length) return;
+          if (chart._axisLabelActiveIndex === index) return;
+
+          const active = [{ datasetIndex: 0, index }];
+          chart._axisLabelActive = true;
+          chart._axisLabelActiveIndex = index;
+          chart.setActiveElements(active);
+          chart.tooltip.setActiveElements(active, { x: event.x, y: event.y });
+          chart.update("none");
+          event.native.target.style.cursor = "pointer";
+        }
+      };
+
       new Chart(canvas, {
         type: "bar",
         data: {
@@ -1245,13 +1285,18 @@
             barThickness: 18
           }]
         },
-        plugins: showBarLabels ? [barLabelPlugin] : [],
+        plugins: showBarLabels ? [barLabelPlugin, axisLabelHoverPlugin] : [axisLabelHoverPlugin],
         options: {
           indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
+          interaction: {
+            mode: "index",
+            intersect: false,
+            axis: "y",
+          },
           layout: {
-            padding: { right: showBarLabels ? 48 : 0 }
+            padding: { right: showBarLabels ? 72 : 0 }
           },
           onClick: openItem,
           onHover: (event, items) => {
@@ -1262,7 +1307,8 @@
             tooltip: {
               enabled: enableTooltip,
               callbacks: {
-                label: item => `${formatter(item.raw)}${suffix}`
+                title: items => items[0].label,
+                label: item => `${formatter(item.raw)}${suffix}`,
               }
             }
           },
@@ -1272,7 +1318,7 @@
               grid: { color: colors.grid },
               ticks: {
                 color: colors.muted,
-                callback: value => formatter(value)
+                callback: value => `${formatter(value)}${suffix}`
               }
             },
             y: {
@@ -1292,42 +1338,87 @@
       });
     }
 
-    function drawSingleLineChart(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
+    function drawVerticalBars(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
+
+      const barLabelPlugin = {
+        id: "verticalBarValueLabels",
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const dataset = chart.data.datasets[0];
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar, index) => {
+            const value = dataset.data[index];
+            const text = `${formatter(value)}${suffix}`;
+            const barTop = Math.min(bar.y, bar.base);
+            const barHeight = Math.abs(bar.base - bar.y);
+            ctx.save();
+            ctx.font = "bold 11px Inter, sans-serif";
+            ctx.textAlign = "center";
+            if (barHeight >= 20) {
+              ctx.fillStyle = "#fff";
+              ctx.textBaseline = "middle";
+              ctx.fillText(text, bar.x, barTop + barHeight / 2);
+            } else {
+              ctx.fillStyle = colors.text;
+              ctx.textBaseline = "bottom";
+              ctx.fillText(text, bar.x, barTop - 4);
+            }
+            ctx.restore();
+          });
+        }
+      };
+
       new Chart(canvas, {
-        type: "line",
+        type: "bar",
         data: {
           labels: rows.map(row => row.label),
           datasets: [{
             label: "",
             data: rows.map(row => row[valueKey]),
             rows,
-            borderColor: color,
             backgroundColor: color,
-            tension: 0.25,
-            borderWidth: 3,
-            pointRadius: isMobile ? 2 : 3
+            borderRadius: 5,
+            maxBarThickness: 42
           }]
         },
+        plugins: [barLabelPlugin],
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
           onClick: openItem,
+          onHover: (event, items) => {
+            event.native.target.style.cursor = items.length ? "pointer" : "default";
+          },
           plugins: {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: item => `${formatter(item.raw)}${suffix}`
+                title: items => {
+                  const row = rows[items[0].dataIndex];
+                  return row ? row.date : items[0].label;
+                },
+                label: item => `${formatter(item.raw)}${suffix}`,
               }
             }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
+            x: {
+              grid: { display: false },
+              ticks: {
+                color: colors.muted,
+                maxTicksLimit: isMobile ? 6 : 12
+              }
+            },
             y: {
               beginAtZero: true,
               grid: { color: colors.grid },
-              ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` }
+              ticks: {
+                color: colors.muted,
+                callback: value => `${formatter(value)}${suffix}`
+              }
             }
           }
         }
@@ -1336,12 +1427,9 @@
 
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
-      drawSingleLineChart("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
-      drawSingleLineChart("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
-      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1), {
-        showBarLabels: true,
-        enableTooltip: false
-      });
+      drawVerticalBars("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
+      drawVerticalBars("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
+      drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
       drawHorizontalBars("targetChart", chartData.target_leads, colors.target, "", money);
       drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
     }
