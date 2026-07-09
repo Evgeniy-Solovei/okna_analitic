@@ -1353,8 +1353,13 @@
         beforeDatasetsDraw(chart) {
           const meta = chart.getDatasetMeta(0);
           const yScale = chart.scales.y;
-          const { ctx } = chart;
+          const { ctx, chartArea } = chart;
           const barWidth = columnBarWidth(chart);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+          ctx.clip();
 
           meta.data.forEach((point, index) => {
             const value = chart.data.datasets[0].data[index];
@@ -1376,12 +1381,18 @@
             }
             ctx.restore();
           });
+          ctx.restore();
         },
         afterDatasetsDraw(chart) {
           const meta = chart.getDatasetMeta(0);
           const yScale = chart.scales.y;
-          const { ctx } = chart;
+          const { ctx, chartArea } = chart;
           const barWidth = columnBarWidth(chart);
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+          ctx.clip();
 
           meta.data.forEach((point, index) => {
             const value = chart.data.datasets[0].data[index];
@@ -1414,6 +1425,7 @@
             }
             ctx.restore();
           });
+          ctx.restore();
         }
       };
 
@@ -1437,6 +1449,9 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: { left: 6, right: 6 }
+          },
           interaction: { mode: "index", intersect: false },
           onClick: (event, items) => {
             if (!items.length) return;
@@ -1464,6 +1479,7 @@
           },
           scales: {
             x: {
+              offset: true,
               grid: { display: false },
               ticks: {
                 color: colors.muted,
@@ -1475,6 +1491,7 @@
               grid: { color: colors.grid },
               ticks: {
                 color: colors.muted,
+                padding: valueKey === "contract_amount" ? 16 : 12,
                 callback: value => `${formatter(value)}${suffix}`
               }
             }
