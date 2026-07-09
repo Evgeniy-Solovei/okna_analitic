@@ -299,7 +299,13 @@ def _daily_rows(qs, filters):
     )
     for row in rows:
         _enrich_daily_row(row)
-        row["url"] = _url_with(filters, date=row["metric_date"].isoformat(), date_from=None, date_to=None)
+        row["url"] = _url_with(
+            filters,
+            date=row["metric_date"].isoformat(),
+            date_from=None,
+            date_to=None,
+            detail=None,
+        )
     return rows
 
 
@@ -553,7 +559,7 @@ def _hourly_rows_for_selected_date(filters):
             "zz": zz_by_hour.get(hour, 0),
             "contracts": contracts_by_hour.get(hour, 0),
             "contract_amount": float(amount_by_hour.get(hour) or 0),
-            "url": _url_with(filters, date=selected_date.isoformat()),
+            "url": _url_with(filters, date=selected_date.isoformat(), detail=None),
         }
         _enrich_daily_row(row)
         rows.append(row)

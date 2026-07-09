@@ -1338,33 +1338,55 @@
       });
     }
 
-    function drawLineWithBars(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
+    function drawSingleLineWithColumnBars(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
 
-      const barLabelPlugin = {
-        id: "verticalBarValueLabels",
-        afterDatasetsDraw(chart) {
-          const { ctx } = chart;
-          const dataset = chart.data.datasets[0];
+      const columnBarPlugin = {
+        id: `columnBars_${canvasId}`,
+        beforeDatasetsDraw(chart) {
           const meta = chart.getDatasetMeta(0);
-          meta.data.forEach((bar, index) => {
-            const value = dataset.data[index];
-            const text = `${formatter(value)}${suffix}`;
-            const barTop = Math.min(bar.y, bar.base);
-            const barHeight = Math.abs(bar.base - bar.y);
+          const yScale = chart.scales.y;
+          const { ctx, chartArea } = chart;
+          const slot = chartArea.width / Math.max(meta.data.length, 1);
+          const barWidth = Math.min(24, slot * 0.55);
+
+          meta.data.forEach((point, index) => {
+            const value = chart.data.datasets[0].data[index];
+            if (value == null) return;
+            const yTop = point.y;
+            const yBase = yScale.getPixelForValue(0);
+            const height = yBase - yTop;
+            if (height <= 1) return;
+
             ctx.save();
-            ctx.font = "bold 11px Inter, sans-serif";
-            ctx.textAlign = "center";
-            if (barHeight >= 20) {
-              ctx.fillStyle = "#fff";
-              ctx.textBaseline = "middle";
-              ctx.fillText(text, bar.x, barTop + barHeight / 2);
+            ctx.fillStyle = `${color}44`;
+            const left = point.x - barWidth / 2;
+            if (ctx.roundRect) {
+              ctx.beginPath();
+              ctx.roundRect(left, yTop, barWidth, height, [4, 4, 0, 0]);
+              ctx.fill();
             } else {
-              ctx.fillStyle = colors.text;
-              ctx.textBaseline = "bottom";
-              ctx.fillText(text, bar.x, barTop - 4);
+              ctx.fillRect(left, yTop, barWidth, height);
             }
+            ctx.restore();
+          });
+        },
+        afterDatasetsDraw(chart) {
+          const meta = chart.getDatasetMeta(0);
+          const { ctx } = chart;
+
+          meta.data.forEach((point, index) => {
+            const value = chart.data.datasets[0].data[index];
+            const text = `${formatter(value)}${suffix}`;
+            ctx.save();
+            ctx.translate(point.x, point.y - 10);
+            ctx.rotate(-Math.PI / 2);
+            ctx.font = "600 10px Inter, sans-serif";
+            ctx.fillStyle = colors.text;
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillText(text, 0, 0);
             ctx.restore();
           });
         }
@@ -1374,38 +1396,31 @@
         type: "line",
         data: {
           labels: rows.map(row => row.label),
-          datasets: [
-            {
-              type: "bar",
-              label: "",
-              data: rows.map(row => row[valueKey]),
-              rows,
-              backgroundColor: `${color}55`,
-              borderRadius: 4,
-              maxBarThickness: 28,
-              order: 2
-            },
-            {
-              type: "line",
-              label: "",
-              data: rows.map(row => row[valueKey]),
-              rows,
-              borderColor: color,
-              backgroundColor: color,
-              tension: 0.25,
-              borderWidth: 3,
-              pointRadius: isMobile ? 2 : 3,
-              pointHoverRadius: 6,
-              order: 1
-            }
-          ]
+          datasets: [{
+            label: "",
+            data: rows.map(row => row[valueKey]),
+            rows,
+            borderColor: color,
+            backgroundColor: color,
+            tension: 0.25,
+            borderWidth: 3,
+            pointRadius: isMobile ? 2 : 3,
+            pointHoverRadius: 6
+          }]
         },
-        plugins: [barLabelPlugin],
+        plugins: [columnBarPlugin],
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          layout: {
+            padding: { top: 56 }
+          },
           interaction: { mode: "index", intersect: false },
-          onClick: openItem,
+          onClick: (event, items) => {
+            if (!items.length) return;
+            const row = rows[items[0].index];
+            if (row && row.url) window.location.href = row.url;
+          },
           onHover: (event, items) => {
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
@@ -1416,13 +1431,12 @@
           plugins: {
             legend: { display: false },
             tooltip: {
-              filter: item => item.datasetIndex === 1,
               callbacks: {
                 title: items => {
                   const row = rows[items[0].dataIndex];
                   return row ? row.date : items[0].label;
                 },
-                label: item => `${formatter(item.raw)}${suffix}`,
+                label: item => `${formatter(item.raw)}${suffix}`
               }
             }
           },
@@ -1449,8 +1463,8 @@
 
     function renderCharts() {
       drawLineChart("dailyChart", chartData.daily);
-      drawLineWithBars("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
-      drawLineWithBars("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
+      drawSingleLineWithColumnBars("dailyConversionChart", chartData.daily, "conversion", colors.conversion, "%", value => value.toFixed(1));
+      drawSingleLineWithColumnBars("dailyAmountChart", chartData.daily, "contract_amount", colors.amount, "", money);
       drawHorizontalBars("conversionChart", chartData.conversion, colors.conversion, "%", value => value.toFixed(1));
       drawHorizontalBars("targetChart", chartData.target_leads, colors.target, "", money);
       drawHorizontalBars("amountChart", chartData.amounts, colors.amount, "", money);
