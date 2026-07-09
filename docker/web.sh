@@ -9,7 +9,12 @@ until python manage.py shell -c "from django.db import connection; connection.en
 done
 
 echo "Applying migrations..."
+echo "Creating model migrations if needed..."
+python manage.py makemigrations --noinput
 python manage.py migrate --noinput
+
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
 
 echo "Ensuring B2B direction and metrics..."
 python manage.py shell -c "from apps.analytics.services import ensure_b2b_integrity; ensure_b2b_integrity()"

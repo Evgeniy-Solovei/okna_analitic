@@ -795,9 +795,6 @@
         <a class="button primary" href="/?force=1">Обновить данные</a>
       {% endif %}
       <button class="button" type="button" id="themeToggle">Тема</button>
-      {% if show_admin_link %}
-        <a class="button" href="/admin/">Админка</a>
-      {% endif %}
       <form class="logout-form" method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <button class="button" type="submit">Выйти</button>
