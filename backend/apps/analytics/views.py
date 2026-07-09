@@ -543,9 +543,9 @@ def _hourly_rows_for_selected_date(filters):
         for item in CrmDeal.objects.filter(contract_filters, contract_date__isnull=False).annotate(hour=ExtractHour("created_time")).values("hour").annotate(count=Count("id"))
     }
     amount_by_hour = {
-        item["hour"]: item["total"]
+        item["hour"]: float(item["total"] or 0)
         for item in CrmDeal.objects.filter(contract_filters, contract_date__isnull=False)
-        .annotate(hour=ExtractHour("contract_date"))
+        .annotate(hour=ExtractHour("created_time"))
         .values("hour")
         .annotate(total=Sum("contract_amount"))
     }

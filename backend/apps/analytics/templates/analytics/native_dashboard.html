@@ -1342,14 +1342,19 @@
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart) return;
 
+      function columnBarWidth(chart) {
+        const area = chart.chartArea;
+        const count = chart.data.labels.length || 1;
+        return Math.min(26, (area.width / count) * 0.58);
+      }
+
       const columnBarPlugin = {
         id: `columnBars_${canvasId}`,
         beforeDatasetsDraw(chart) {
           const meta = chart.getDatasetMeta(0);
           const yScale = chart.scales.y;
-          const { ctx, chartArea } = chart;
-          const slot = chartArea.width / Math.max(meta.data.length, 1);
-          const barWidth = Math.min(24, slot * 0.55);
+          const { ctx } = chart;
+          const barWidth = columnBarWidth(chart);
 
           meta.data.forEach((point, index) => {
             const value = chart.data.datasets[0].data[index];
@@ -1360,7 +1365,7 @@
             if (height <= 1) return;
 
             ctx.save();
-            ctx.fillStyle = `${color}44`;
+            ctx.fillStyle = `${color}CC`;
             const left = point.x - barWidth / 2;
             if (ctx.roundRect) {
               ctx.beginPath();
@@ -1374,19 +1379,39 @@
         },
         afterDatasetsDraw(chart) {
           const meta = chart.getDatasetMeta(0);
+          const yScale = chart.scales.y;
           const { ctx } = chart;
+          const barWidth = columnBarWidth(chart);
 
           meta.data.forEach((point, index) => {
             const value = chart.data.datasets[0].data[index];
+            if (value == null) return;
+            const yTop = point.y;
+            const yBase = yScale.getPixelForValue(0);
+            const height = yBase - yTop;
+            if (height <= 12) return;
+
             const text = `${formatter(value)}${suffix}`;
+            const centerY = yTop + height / 2;
+            const maxTextSpan = height - 8;
+
             ctx.save();
-            ctx.translate(point.x, point.y - 10);
+            ctx.translate(point.x, centerY);
             ctx.rotate(-Math.PI / 2);
-            ctx.font = "600 10px Inter, sans-serif";
-            ctx.fillStyle = colors.text;
-            ctx.textAlign = "left";
-            ctx.textBaseline = "middle";
-            ctx.fillText(text, 0, 0);
+
+            let fontSize = Math.min(10, barWidth - 1);
+            ctx.font = `600 ${fontSize}px Inter, sans-serif`;
+            while (ctx.measureText(text).width > maxTextSpan && fontSize > 7) {
+              fontSize -= 1;
+              ctx.font = `600 ${fontSize}px Inter, sans-serif`;
+            }
+
+            if (ctx.measureText(text).width <= maxTextSpan) {
+              ctx.fillStyle = "#fff";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(text, 0, 0);
+            }
             ctx.restore();
           });
         }
@@ -1412,9 +1437,6 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          layout: {
-            padding: { top: 56 }
-          },
           interaction: { mode: "index", intersect: false },
           onClick: (event, items) => {
             if (!items.length) return;
