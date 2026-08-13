@@ -9,8 +9,6 @@ until python manage.py shell -c "from django.db import connection; connection.en
 done
 
 echo "Applying migrations..."
-echo "Creating model migrations if needed..."
-python manage.py makemigrations --noinput
 python manage.py migrate --noinput
 
 echo "Collecting static files..."
