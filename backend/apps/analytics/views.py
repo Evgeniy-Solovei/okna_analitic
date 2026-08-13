@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
+import requests
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import connection
@@ -131,7 +132,28 @@ def _base_metric_queryset(request):
     selected_date = _parse_date_param(request.GET.get("date"))
     manager_ids = _ids_from_request(request, "manager")
     exclude_manager_ids = _ids_from_request(request, "exclude_manager")
-    direction_ids = _ids_from_request(request, "direction")
+    requested_direction_ids = _ids_from_request(request, "direction")
+    available_direction_ids = list(
+        BusinessDirection.objects.filter(is_active=True)
+        .exclude(code=BusinessDirection.Code.B2B)
+        .values_list("id", flat=True)
+    )
+    direction_id = next(
+        (item for item in requested_direction_ids if item in available_direction_ids),
+        None,
+    )
+    if direction_id is None:
+        direction_id = (
+            BusinessDirection.objects.filter(
+                code=BusinessDirection.Code.PANORAMA,
+                is_active=True,
+            )
+            .values_list("id", flat=True)
+            .first()
+        )
+    if direction_id is None and available_direction_ids:
+        direction_id = available_direction_ids[0]
+    direction_ids = [direction_id] if direction_id is not None else []
     detail = request.GET.get("detail") or ""
 
     manager_ids, exclude_manager_ids = resolve_manager_filters(
@@ -232,35 +254,34 @@ def _direction_table_rows(qs, filters):
             continue
 
         direction_qs = qs.filter(direction_id=direction.id)
-        if direction.code == BusinessDirection.Code.PANORAMA:
-            manager_rows = list(
-                direction_qs.values("manager_id", "manager__name")
-                .annotate(
-                    leads=Sum("leads"),
-                    target_leads=Sum("target_leads"),
-                    zz=Sum("zz"),
-                    contracts=Sum("contracts"),
-                    contract_amount=Sum("contract_amount"),
-                )
-                .order_by("manager__name")
+        manager_rows = list(
+            direction_qs.values("manager_id", "manager__name")
+            .annotate(
+                leads=Sum("leads"),
+                target_leads=Sum("target_leads"),
+                zz=Sum("zz"),
+                contracts=Sum("contracts"),
+                contract_amount=Sum("contract_amount"),
             )
-            for row in manager_rows:
-                if not any(row.get(key) for key in ("leads", "target_leads", "zz", "contracts", "contract_amount")):
-                    continue
-                _enrich_metric_row(row)
-                rows.append(
-                    {
-                        "row_type": "manager",
-                        "label": row["manager__name"],
-                        "leads": row["leads"] or 0,
-                        "target_leads": row["target_leads"] or 0,
-                        "zz": row["zz"] or 0,
-                        "conversion": row["conversion"],
-                        "contracts": row["contracts"] or 0,
-                        "contract_amount": row["contract_amount"] or 0,
-                        "avg_check": row["avg_check"],
-                    }
-                )
+            .order_by("manager__name")
+        )
+        for row in manager_rows:
+            if not any(row.get(key) for key in ("leads", "target_leads", "zz", "contracts", "contract_amount")):
+                continue
+            _enrich_metric_row(row)
+            rows.append(
+                {
+                    "row_type": "manager",
+                    "label": row["manager__name"],
+                    "leads": row["leads"] or 0,
+                    "target_leads": row["target_leads"] or 0,
+                    "zz": row["zz"] or 0,
+                    "conversion": row["conversion"],
+                    "contracts": row["contracts"] or 0,
+                    "contract_amount": row["contract_amount"] or 0,
+                    "avg_check": row["avg_check"],
+                }
+            )
 
         totals = direction_qs.aggregate(
             leads=Sum("leads"),
@@ -379,7 +400,7 @@ def _dashboard_context(request):
     selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
     selected_manager_title = _selection_title(selected_managers, "Все менеджеры")
     excluded_manager_title = _selection_title(excluded_managers, "Не исключать")
-    selected_direction_title = _selection_title(selected_directions, "Все направления")
+    selected_direction_title = _selection_title(selected_directions, "Направление не настроено")
 
     if filters["selected_date"]:
         daily_rows = _hourly_rows_for_selected_date(filters)
@@ -454,8 +475,6 @@ def _dashboard_context(request):
 
     manager_all_url = _url_with(filters, manager=[])
     exclude_all_url = _url_with(filters, exclude_manager=[])
-    direction_all_url = _url_with(filters, direction=[])
-
     return {
         "totals": totals,
         "filters": filters,
@@ -476,7 +495,6 @@ def _dashboard_context(request):
         "selected_direction_title": selected_direction_title,
         "manager_all_url": manager_all_url,
         "exclude_all_url": exclude_all_url,
-        "direction_all_url": direction_all_url,
         "conversion_rows": conversion_rows,
         "target_rows": target_rows,
         "amount_rows": amount_rows,
@@ -570,12 +588,19 @@ def _hourly_rows_for_selected_date(filters):
 def dashboard_entry(request):
     ensure_b2b_integrity()
     force_sync = request.GET.get("force") == "1"
-    if force_sync:
-        if can_force_sync(request.user):
-            _on_demand_sync_if_needed(force=True)
-    elif not request.GET:
-        _on_demand_sync_if_needed(force=False)
-    return render(request, "analytics/native_dashboard.html", _dashboard_context(request))
+    sync_error = ""
+    try:
+        if force_sync:
+            if can_force_sync(request.user):
+                _on_demand_sync_if_needed(force=True)
+        elif not request.GET:
+            _on_demand_sync_if_needed(force=False)
+    except requests.RequestException:
+        sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
+
+    context = _dashboard_context(request)
+    context["sync_error"] = sync_error
+    return render(request, "analytics/native_dashboard.html", context)
 
 
 @login_required

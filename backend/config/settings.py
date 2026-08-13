@@ -133,6 +133,8 @@ BITRIX24 = {
         value.strip().lower() for value in os.getenv("LEAD_RO_DIRECTION_VALUES", "Русские окна,РО,ro").split(",") if value.strip()
     ],
     "DEAL_CONTRACT_DATE_FIELD": os.getenv("DEAL_CONTRACT_DATE_FIELD", ""),
+    "RO_DEAL_CONTRACT_DATE_FIELD": os.getenv("RO_DEAL_CONTRACT_DATE_FIELD", "UF_CRM_1784882995485"),
+    "DEAL_CONTRACT_NUMBER_FIELD": os.getenv("DEAL_CONTRACT_NUMBER_FIELD", "UF_CRM_1759759532794"),
     "DEAL_CONTRACT_AMOUNT_FIELD": os.getenv("DEAL_CONTRACT_AMOUNT_FIELD", "OPPORTUNITY"),
 }
 

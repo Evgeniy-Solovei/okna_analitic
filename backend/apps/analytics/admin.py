@@ -74,9 +74,9 @@ class CrmLeadAdmin(admin.ModelAdmin):
 
 @admin.register(CrmDeal)
 class CrmDealAdmin(admin.ModelAdmin):
-    list_display = ("bitrix_id", "title", "pipeline", "stage", "created_time", "assigned_by", "direction", "contract_date", "contract_amount")
+    list_display = ("bitrix_id", "title", "pipeline", "stage", "created_time", "assigned_by", "direction", "contract_number", "contract_date", "contract_amount")
     list_filter = ("pipeline", "stage", "direction")
-    search_fields = ("bitrix_id", "title")
+    search_fields = ("bitrix_id", "title", "contract_number")
     date_hierarchy = "created_time"
 
 

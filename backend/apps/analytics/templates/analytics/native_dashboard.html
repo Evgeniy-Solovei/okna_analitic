@@ -262,11 +262,24 @@
       flex-shrink: 0;
       display: grid;
       grid-template-columns: 1fr;
+      min-width: 0;
       gap: 8px;
       margin-top: 8px;
       padding-top: 8px;
       border-top: 1px solid var(--line);
       background: var(--panel);
+    }
+
+    .multi-actions .button {
+      box-sizing: border-box;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      padding-inline: clamp(6px, 4%, 14px);
+      font-size: clamp(11px, 1vw, 14px);
+      line-height: 1.15;
+      white-space: normal;
+      text-align: center;
     }
 
     .kpis {
@@ -788,7 +801,7 @@
   <header class="topbar">
     <div>
       <h1><a href="https://platform.oknapanorama.by/">Эффективность менеджеров</a></h1>
-      <div class="subtitle">Окна Панорама: данные Bitrix24 обновляются автоматически</div>
+      <div class="subtitle">{{ selected_direction_title }}: данные Bitrix24 обновляются автоматически</div>
     </div>
     <nav class="actions" aria-label="Действия">
       {% if can_force_sync %}
@@ -803,6 +816,9 @@
   </header>
 
   <main class="page">
+    {% if sync_error %}
+      <div class="card" style="margin-bottom:16px;color:#b45309;">{{ sync_error }}</div>
+    {% endif %}
     <form class="filters" method="get">
       <div>
         <label for="date_from">Дата с</label>
@@ -864,10 +880,9 @@
           <summary>{{ selected_direction_title }}</summary>
           <div class="multi-menu">
             <div class="multi-options">
-              <a class="check-row all-option" href="{{ direction_all_url }}">Все направления</a>
               {% for direction in directions %}
                 <label class="check-row">
-                  <input type="checkbox" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
+                  <input type="radio" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
                   <span>{{ direction.name }}</span>
                 </label>
               {% endfor %}
@@ -1075,10 +1090,10 @@
           <h2>Договоры</h2>
           <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
-            <thead><tr><th>ID сделки</th><th>Дата</th><th>Название</th><th>Сумма</th></tr></thead>
+            <thead><tr><th>ID сделки</th><th>Дата</th><th>№ договора</th><th>Сумма</th></tr></thead>
             <tbody>
               {% for contract in details.contracts %}
-                <tr><td>{{ contract.bitrix_id }}</td><td>{{ contract.contract_date|date:'d.m.Y' }}</td><td>{{ contract.title }}</td><td>{{ contract.contract_amount }}</td></tr>
+                <tr><td>{{ contract.bitrix_id }}</td><td>{{ contract.contract_date|date:'d.m.Y' }}</td><td>{% firstof contract.contract_number contract.title %}</td><td>{{ contract.contract_amount }}</td></tr>
               {% empty %}
                 <tr><td colspan="4" class="empty">Нет договоров.</td></tr>
               {% endfor %}

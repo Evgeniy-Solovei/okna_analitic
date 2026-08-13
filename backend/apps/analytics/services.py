@@ -45,6 +45,21 @@ def decimal_from_bitrix(value: Any) -> Decimal:
     return Decimal(str(value).replace(",", "."))
 
 
+def contract_date_from_deal(raw: dict[str, Any]):
+    """Read the contract date from the field used by the deal's funnel."""
+    default_field = settings.BITRIX24["DEAL_CONTRACT_DATE_FIELD"]
+    ro_field = settings.BITRIX24["RO_DEAL_CONTRACT_DATE_FIELD"]
+    selected_field = (
+        ro_field
+        if str(raw.get("CATEGORY_ID", "0")) == str(settings.BITRIX24["RO_PIPELINE_ID"])
+        else default_field
+    )
+    value = raw.get(selected_field) if selected_field else None
+    if not value and selected_field != default_field and default_field:
+        value = raw.get(default_field)
+    return parse_bitrix_date(value)
+
+
 def bitrix_datetime(value: datetime) -> str:
     return value.astimezone(timezone.get_current_timezone()).replace(microsecond=0).isoformat()
 
@@ -290,7 +305,7 @@ def sync_leads(client: BitrixClient, modified_from: str | None = None) -> int:
 
 
 def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
-    contract_date_field = settings.BITRIX24["DEAL_CONTRACT_DATE_FIELD"]
+    contract_number_field = settings.BITRIX24["DEAL_CONTRACT_NUMBER_FIELD"]
     contract_amount_field = settings.BITRIX24["DEAL_CONTRACT_AMOUNT_FIELD"]
     payload = {
         "select": ["*", "UF_*"],
@@ -317,7 +332,8 @@ def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
                 "direction": direction,
                 "created_time": parse_bitrix_datetime(raw.get("DATE_CREATE")) or timezone.now(),
                 "moved_time": parse_bitrix_datetime(raw.get("MOVED_TIME")),
-                "contract_date": parse_bitrix_date(raw.get(contract_date_field)) if contract_date_field else None,
+                "contract_number": str(raw.get(contract_number_field) or "") if contract_number_field else "",
+                "contract_date": contract_date_from_deal(raw),
                 "contract_amount": decimal_from_bitrix(raw.get(contract_amount_field)),
                 "raw": raw,
             },

@@ -123,6 +123,7 @@ class CrmDeal(TimestampedModel):
     direction = models.ForeignKey(BusinessDirection, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="Направление")
     created_time = models.DateTimeField(verbose_name="Дата создания")
     moved_time = models.DateTimeField(null=True, blank=True, verbose_name="Дата перемещения")
+    contract_number = models.CharField(max_length=255, blank=True, db_index=True, verbose_name="Номер договора")
     contract_date = models.DateField(null=True, blank=True, verbose_name="Дата договора")
     contract_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, verbose_name="Сумма договора")
     raw = models.JSONField(default=dict, blank=True, verbose_name="Сырые данные")
@@ -278,4 +279,3 @@ class DashboardUserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} → {self.crm_user or '—'}"
-
