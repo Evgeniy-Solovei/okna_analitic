@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
@@ -23,6 +24,7 @@ from .services import (
 )
 
 
+logger = logging.getLogger(__name__)
 SYNC_LOCK_ID = 24062026
 
 
@@ -596,6 +598,7 @@ def dashboard_entry(request):
         elif not request.GET:
             _on_demand_sync_if_needed(force=False)
     except requests.RequestException:
+        logger.exception("Bitrix24 on-demand sync failed")
         sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
 
     context = _dashboard_context(request)

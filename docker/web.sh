@@ -18,4 +18,11 @@ echo "Ensuring B2B direction and metrics..."
 python manage.py shell -c "from apps.analytics.services import ensure_b2b_integrity; ensure_b2b_integrity()"
 
 echo "Starting gunicorn..."
-exec gunicorn config.wsgi:application --chdir /app/backend --bind 0.0.0.0:8000 --timeout 180
+exec gunicorn config.wsgi:application \
+  --chdir /app/backend \
+  --bind 0.0.0.0:8000 \
+  --timeout 180 \
+  --access-logfile - \
+  --error-logfile - \
+  --capture-output \
+  --log-level info
