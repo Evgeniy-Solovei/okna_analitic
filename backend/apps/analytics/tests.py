@@ -84,3 +84,9 @@ class DirectionRoleTests(TestCase):
         allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
         self.assertEqual(allowed, ["ro"])
 
+    def test_unassigned_user_has_no_directions(self):
+        user = User.objects.create_user("plain_user", "plain@test.com", "pass")
+        allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
+        self.assertEqual(allowed, [])
+
+

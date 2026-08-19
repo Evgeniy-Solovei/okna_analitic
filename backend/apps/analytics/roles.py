@@ -34,7 +34,7 @@ def user_in_group(user, group_name: str) -> bool:
 
 
 def user_is_admin(user) -> bool:
-    return user.is_authenticated and (user.is_superuser or user.is_staff or user_in_group(user, GROUP_ADMIN))
+    return user.is_authenticated and (user.is_superuser or user_in_group(user, GROUP_ADMIN))
 
 
 def user_is_director(user) -> bool:
@@ -82,7 +82,7 @@ def get_user_allowed_directions(user):
         return active_directions.none()
 
     # Superusers, Admins, Directors have access to all directions
-    if user.is_superuser or user_is_admin(user) or user_in_group(user, GROUP_DIRECTOR):
+    if user.is_superuser or user_in_group(user, GROUP_ADMIN) or user_in_group(user, GROUP_DIRECTOR):
         return active_directions
 
     # Explicit allowed directions on user profile
@@ -98,6 +98,10 @@ def get_user_allowed_directions(user):
         return active_directions.filter(code=BusinessDirection.Code.PANORAMA)
     if is_ro and not is_panorama:
         return active_directions.filter(code=BusinessDirection.Code.RO)
+    if is_panorama and is_ro:
+        return active_directions
 
-    return active_directions
+    # If user has no explicit direction assigned and no direction group
+    return active_directions.none()
+
 
