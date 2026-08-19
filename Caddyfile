@@ -1,5 +1,6 @@
 {$APP_DOMAIN:platform.oknapanorama.by} {
-    encode zstd gzip
+    encode gzip
+
 
     redir /admin /admin/ 308
 

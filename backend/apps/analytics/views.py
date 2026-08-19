@@ -13,7 +13,7 @@ from django.shortcuts import render
 from django.utils import timezone
 
 from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric
-from .roles import can_force_sync, resolve_manager_filters, user_is_admin, user_is_manager_only
+from .roles import can_force_sync, get_user_allowed_directions, resolve_manager_filters, user_is_admin, user_is_manager_only
 from .services import (
     bitrix_datetime,
     ensure_b2b_integrity,
@@ -135,20 +135,18 @@ def _base_metric_queryset(request):
     manager_ids = _ids_from_request(request, "manager")
     exclude_manager_ids = _ids_from_request(request, "exclude_manager")
     requested_direction_ids = _ids_from_request(request, "direction")
-    available_direction_ids = list(
-        BusinessDirection.objects.filter(is_active=True)
-        .exclude(code=BusinessDirection.Code.B2B)
-        .values_list("id", flat=True)
-    )
+
+    user_allowed_directions = get_user_allowed_directions(request.user)
+    available_direction_ids = list(user_allowed_directions.values_list("id", flat=True))
+
     direction_id = next(
         (item for item in requested_direction_ids if item in available_direction_ids),
         None,
     )
     if direction_id is None:
         direction_id = (
-            BusinessDirection.objects.filter(
+            user_allowed_directions.filter(
                 code=BusinessDirection.Code.PANORAMA,
-                is_active=True,
             )
             .values_list("id", flat=True)
             .first()
@@ -157,6 +155,7 @@ def _base_metric_queryset(request):
         direction_id = available_direction_ids[0]
     direction_ids = [direction_id] if direction_id is not None else []
     detail = request.GET.get("detail") or ""
+
 
     manager_ids, exclude_manager_ids = resolve_manager_filters(
         request.user, manager_ids, exclude_manager_ids
@@ -241,10 +240,15 @@ def _manager_rows(qs, filters):
     return rows
 
 
-def _direction_table_rows(qs, filters):
+def _direction_table_rows(qs, filters, user=None):
     rows = []
     direction_ids = filters["direction_ids"]
-    active_directions = BusinessDirection.objects.filter(is_active=True).exclude(code=BusinessDirection.Code.B2B)
+    active_directions = (
+        get_user_allowed_directions(user)
+        if user
+        else BusinessDirection.objects.filter(is_active=True).exclude(code=BusinessDirection.Code.B2B)
+    )
+
 
     def include_direction(direction):
         if not direction_ids:
@@ -395,7 +399,8 @@ def _dashboard_context(request):
     target_rows = sorted(manager_rows, key=lambda item: item["target_leads"] or 0, reverse=True)
     target_rows = _bar_rows(target_rows, "target_leads")
     amount_rows = _bar_rows(manager_rows.copy(), "contract_amount")
-    direction_table_rows = _direction_table_rows(qs, filters)
+    direction_table_rows = _direction_table_rows(qs, filters, user=request.user)
+
 
     selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
     excluded_managers = list(CrmUser.objects.filter(id__in=filters.get("exclude_manager_ids", [])).order_by("name"))
@@ -483,12 +488,8 @@ def _dashboard_context(request):
         "managers": CrmUser.objects.filter(
             id__in=ManagerDailyMetric.objects.values_list("manager_id", flat=True).distinct()
         ).order_by("name"),
-        "directions": BusinessDirection.objects.filter(
-            is_active=True,
-            id__in=ManagerDailyMetric.objects.values_list("direction_id", flat=True).distinct(),
-        )
-        .exclude(code=BusinessDirection.Code.B2B)
-        .order_by("name"),
+        "directions": get_user_allowed_directions(request.user).order_by("name"),
+
         "selected_managers": selected_managers,
         "excluded_managers": excluded_managers,
         "selected_directions": selected_directions,

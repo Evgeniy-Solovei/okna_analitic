@@ -5,11 +5,15 @@ from django.contrib.auth.models import Group
 GROUP_DIRECTOR = "dashboard_director"
 GROUP_MANAGER = "dashboard_manager"
 GROUP_ADMIN = "dashboard_admin"
+GROUP_PANORAMA = "dashboard_panorama"
+GROUP_RO = "dashboard_ro"
 
 GROUP_DEFINITIONS = {
     GROUP_DIRECTOR: "Руководитель — полный доступ ко всем данным дашборда",
     GROUP_MANAGER: "Менеджер — видит только свои показатели",
     GROUP_ADMIN: "Администратор — дашборд + техническая админка",
+    GROUP_PANORAMA: "Панорама — доступ только к направлению Панорама",
+    GROUP_RO: "Русские окна — доступ только к направлению Русские окна",
 }
 
 
@@ -67,3 +71,33 @@ def resolve_manager_filters(user, manager_ids: list[int], exclude_manager_ids: l
 
 def can_force_sync(user) -> bool:
     return user_is_director(user) or user_is_admin(user)
+
+
+def get_user_allowed_directions(user):
+    from .models import BusinessDirection
+
+    active_directions = BusinessDirection.objects.filter(is_active=True).exclude(code=BusinessDirection.Code.B2B)
+
+    if not user or not user.is_authenticated:
+        return active_directions.none()
+
+    # Superusers, Admins, Directors have access to all directions
+    if user.is_superuser or user_is_admin(user) or user_in_group(user, GROUP_DIRECTOR):
+        return active_directions
+
+    # Explicit allowed directions on user profile
+    profile = getattr(user, "dashboard_profile", None)
+    if profile and profile.pk and profile.allowed_directions.exists():
+        return profile.allowed_directions.filter(is_active=True).exclude(code=BusinessDirection.Code.B2B)
+
+    # Group-based direction restrictions
+    is_panorama = user_in_group(user, GROUP_PANORAMA)
+    is_ro = user_in_group(user, GROUP_RO)
+
+    if is_panorama and not is_ro:
+        return active_directions.filter(code=BusinessDirection.Code.PANORAMA)
+    if is_ro and not is_panorama:
+        return active_directions.filter(code=BusinessDirection.Code.RO)
+
+    return active_directions
+

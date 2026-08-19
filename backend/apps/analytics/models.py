@@ -271,6 +271,11 @@ class DashboardUserProfile(models.Model):
         on_delete=models.SET_NULL,
         verbose_name="Менеджер Bitrix",
     )
+    allowed_directions = models.ManyToManyField(
+        BusinessDirection,
+        blank=True,
+        verbose_name="Разрешенные направления",
+    )
 
     class Meta:
         db_table = "dashboard_user_profiles"
@@ -279,3 +284,4 @@ class DashboardUserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} → {self.crm_user or '—'}"
+

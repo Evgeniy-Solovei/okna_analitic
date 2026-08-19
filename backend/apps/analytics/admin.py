@@ -23,6 +23,7 @@ class DashboardUserProfileInline(admin.StackedInline):
     can_delete = False
     extra = 0
     autocomplete_fields = ("crm_user",)
+    filter_horizontal = ("allowed_directions",)
 
 
 class UserAdmin(BaseUserAdmin):
@@ -38,6 +39,8 @@ class DashboardUserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "crm_user")
     search_fields = ("user__username", "user__email", "crm_user__name")
     autocomplete_fields = ("user", "crm_user")
+    filter_horizontal = ("allowed_directions",)
+
 
 
 @admin.register(BusinessDirection)

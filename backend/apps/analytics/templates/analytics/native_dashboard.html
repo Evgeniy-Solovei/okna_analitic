@@ -876,6 +876,7 @@
       {% endif %}
       <div>
         <label for="direction">Направление</label>
+        {% if directions|length > 1 %}
         <details class="multi-select" id="direction">
           <summary>{{ selected_direction_title }}</summary>
           <div class="multi-menu">
@@ -892,6 +893,9 @@
             </div>
           </div>
         </details>
+        {% else %}
+        <input type="text" value="{{ selected_direction_title }}" readonly style="background: var(--soft); font-weight: 600; cursor: not-allowed;">
+        {% endif %}
       </div>
       <div class="filter-actions">
         <label>&nbsp;</label>

@@ -98,6 +98,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = PROJECT_ROOT / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+
 APPEND_SLASH = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

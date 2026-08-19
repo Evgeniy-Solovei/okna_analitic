@@ -1,7 +1,15 @@
 from datetime import date
 
-from django.test import SimpleTestCase, override_settings
+from django.contrib.auth.models import Group, User
+from django.test import TestCase, SimpleTestCase, override_settings
 
+from .models import BusinessDirection, DashboardUserProfile
+from .roles import (
+    GROUP_ADMIN,
+    GROUP_PANORAMA,
+    GROUP_RO,
+    get_user_allowed_directions,
+)
 from .services import contract_date_from_deal
 
 
@@ -37,3 +45,42 @@ class ContractDateMappingTests(SimpleTestCase):
             "UF_RO_DATE": "2026-08-16",
         }
         self.assertEqual(contract_date_from_deal(raw), date(2026, 8, 15))
+
+
+class DirectionRoleTests(TestCase):
+    def setUp(self):
+        self.panorama, _ = BusinessDirection.objects.get_or_create(code=BusinessDirection.Code.PANORAMA, defaults={"name": "Панорама"})
+        self.ro, _ = BusinessDirection.objects.get_or_create(code=BusinessDirection.Code.RO, defaults={"name": "Русские окна"})
+        self.b2b, _ = BusinessDirection.objects.get_or_create(code=BusinessDirection.Code.B2B, defaults={"name": "B2B", "is_active": False})
+
+        self.group_panorama, _ = Group.objects.get_or_create(name=GROUP_PANORAMA)
+        self.group_ro, _ = Group.objects.get_or_create(name=GROUP_RO)
+        self.group_admin, _ = Group.objects.get_or_create(name=GROUP_ADMIN)
+
+
+    def test_superuser_sees_all_active_directions(self):
+        user = User.objects.create_superuser("admin", "admin@test.com", "pass")
+        allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
+        self.assertIn("panorama", allowed)
+        self.assertIn("ro", allowed)
+        self.assertNotIn("b2b", allowed)
+
+    def test_panorama_group_sees_only_panorama(self):
+        user = User.objects.create_user("p_user", "p@test.com", "pass")
+        user.groups.add(self.group_panorama)
+        allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
+        self.assertEqual(allowed, ["panorama"])
+
+    def test_ro_group_sees_only_ro(self):
+        user = User.objects.create_user("ro_user", "ro@test.com", "pass")
+        user.groups.add(self.group_ro)
+        allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
+        self.assertEqual(allowed, ["ro"])
+
+    def test_user_profile_allowed_directions_override(self):
+        user = User.objects.create_user("custom_user", "c@test.com", "pass")
+        profile = DashboardUserProfile.objects.create(user=user)
+        profile.allowed_directions.add(self.ro)
+        allowed = list(get_user_allowed_directions(user).values_list("code", flat=True))
+        self.assertEqual(allowed, ["ro"])
+
