@@ -191,7 +191,10 @@ def _metric_queryset(request):
     qs, filters = _base_metric_queryset(request)
     if filters["direction_ids"]:
         qs = qs.filter(direction_id__in=filters["direction_ids"])
+    else:
+        qs = qs.none()
     return qs, filters
+
 
 
 def _sum_metrics(qs):
@@ -368,6 +371,12 @@ def _build_detail_filters(filters):
         deal_detail_filters &= Q(direction_id__in=filters["direction_ids"])
         contract_detail_filters &= Q(direction_id__in=filters["direction_ids"])
         first_zz_filters &= Q(deal__direction_id__in=filters["direction_ids"])
+    else:
+        lead_detail_filters &= Q(pk__in=[])
+        deal_detail_filters &= Q(pk__in=[])
+        contract_detail_filters &= Q(pk__in=[])
+        first_zz_filters &= Q(pk__in=[])
+
 
     if filters["selected_date"]:
         lead_detail_filters &= Q(created_time__date=filters["selected_date"])
