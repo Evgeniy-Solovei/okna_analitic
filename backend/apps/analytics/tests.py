@@ -90,3 +90,30 @@ class DirectionRoleTests(TestCase):
         self.assertEqual(allowed, [])
 
 
+class ReconciliationTests(TestCase):
+    def test_reconcile_deleted_deals_removes_missing_deals(self):
+        from django.utils import timezone
+        from unittest.mock import MagicMock
+        from .models import CrmDeal
+        from .services import reconcile_deleted_deals
+
+        now = timezone.now()
+        # Create local deals
+        deal1 = CrmDeal.objects.create(bitrix_id=100, title="Deal 100", created_time=now)
+        deal2 = CrmDeal.objects.create(bitrix_id=101, title="Deal 101", created_time=now)
+        deal_deleted = CrmDeal.objects.create(bitrix_id=999, title="Deleted Deal 999", created_time=now)
+
+
+        # Mock client returning only live IDs [100, 101]
+        mock_client = MagicMock()
+        mock_client.list_all.return_value = [{"ID": "100"}, {"ID": "101"}]
+
+        removed_count = reconcile_deleted_deals(mock_client)
+
+        self.assertEqual(removed_count, 1)
+        self.assertTrue(CrmDeal.objects.filter(bitrix_id=100).exists())
+        self.assertTrue(CrmDeal.objects.filter(bitrix_id=101).exists())
+        self.assertFalse(CrmDeal.objects.filter(bitrix_id=999).exists())
+
+
+

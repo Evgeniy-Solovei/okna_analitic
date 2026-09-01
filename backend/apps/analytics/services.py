@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from itertools import islice
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
+
 
 from django.conf import settings
 from django.db import transaction
@@ -105,6 +109,8 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
 
         stats["leads"] = sync_leads(client, modified_from=modified_from)
         stats["deals"] = sync_deals(client, modified_from=modified_from)
+        stats["reconciled_deleted_deals"] = reconcile_deleted_deals(client)
+
 
         changed_deal_ids = None
         if mode == "incremental":
@@ -340,6 +346,25 @@ def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
         )
         count += 1
     return count
+
+
+def reconcile_deleted_deals(client: BitrixClient) -> int:
+    """Finds deals in local DB that were deleted in Bitrix24 and removes them."""
+    live_bitrix_ids = set()
+    for raw in client.list_all("crm.deal.list", {"select": ["ID"]}):
+        if "ID" in raw:
+            live_bitrix_ids.add(int(raw["ID"]))
+
+    if not live_bitrix_ids:
+        return 0
+
+    deleted_qs = CrmDeal.objects.exclude(bitrix_id__in=live_bitrix_ids)
+    count = deleted_qs.count()
+    if count > 0:
+        logger.info(f"Reconciling deleted deals: removing {count} deals from local DB")
+        deleted_qs.delete()
+    return count
+
 
 
 def changed_deal_ids_since(modified_from: str | None) -> list[int]:
