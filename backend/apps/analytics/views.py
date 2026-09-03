@@ -598,8 +598,8 @@ def _hourly_rows_for_selected_date(filters):
 
 @login_required
 def dashboard_entry(request):
-    ensure_b2b_integrity()
     force_sync = request.GET.get("force") == "1"
+
     sync_error = ""
     if force_sync and can_force_sync(request.user):
         try:

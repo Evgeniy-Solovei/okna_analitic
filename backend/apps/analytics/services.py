@@ -271,7 +271,9 @@ def ensure_b2b_integrity() -> bool:
         if migrated:
             changed = True
         if ManagerDailyMetric.objects.filter(direction=b2b_direction).exists():
+            ManagerDailyMetric.objects.filter(direction=b2b_direction).delete()
             changed = True
+
         if b2b_direction.is_active:
             b2b_direction.is_active = False
             b2b_direction.save(update_fields=["is_active", "updated_at"])
