@@ -104,11 +104,16 @@ class ReconciliationTests(TestCase):
         deal_deleted = CrmDeal.objects.create(bitrix_id=999, title="Deleted Deal 999", created_time=now)
 
 
-        # Mock client returning only live IDs [100, 101]
+        # Mock client returning batch response with live IDs [100, 101]
         mock_client = MagicMock()
-        mock_client.list_all.return_value = [{"ID": "100"}, {"ID": "101"}]
+        mock_client.batch.return_value = {
+            "result": {
+                "c_0": [{"ID": "100"}, {"ID": "101"}]
+            }
+        }
 
         removed_count = reconcile_deleted_deals(mock_client)
+
 
         self.assertEqual(removed_count, 1)
         self.assertTrue(CrmDeal.objects.filter(bitrix_id=100).exists())

@@ -602,11 +602,8 @@ def dashboard_entry(request):
     force_sync = request.GET.get("force") == "1"
     sync_error = ""
     try:
-        if force_sync:
-            if can_force_sync(request.user):
-                _on_demand_sync_if_needed(force=True)
-        elif not request.GET:
-            _on_demand_sync_if_needed(force=False)
+        if force_sync and can_force_sync(request.user):
+            _on_demand_sync_if_needed(force=True)
     except requests.RequestException:
         logger.exception("Bitrix24 on-demand sync failed")
         sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
@@ -614,6 +611,7 @@ def dashboard_entry(request):
     context = _dashboard_context(request)
     context["sync_error"] = sync_error
     return render(request, "analytics/native_dashboard.html", context)
+
 
 
 @login_required

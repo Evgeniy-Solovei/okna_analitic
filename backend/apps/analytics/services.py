@@ -349,11 +349,35 @@ def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
 
 
 def reconcile_deleted_deals(client: BitrixClient) -> int:
-    """Finds deals in local DB that were deleted in Bitrix24 and removes them."""
+    """Finds deals in local DB that were deleted in Bitrix24 and removes them using fast batching."""
     live_bitrix_ids = set()
-    for raw in client.list_all("crm.deal.list", {"select": ["ID"]}):
-        if "ID" in raw:
-            live_bitrix_ids.add(int(raw["ID"]))
+    start = 0
+    while True:
+        commands = {
+            f"c_{i}": f"crm.deal.list?select[]=ID&order[ID]=ASC&start={start + i * 50}"
+            for i in range(50)
+        }
+        batch_res = client.batch(commands)
+        result_cmd = batch_res.get("result", {})
+
+        fetched_count = 0
+        last_reached = False
+        for i in range(50):
+            cmd_key = f"c_{i}"
+            items = result_cmd.get(cmd_key, [])
+            if not isinstance(items, list):
+                break
+            for raw in items:
+                if "ID" in raw:
+                    live_bitrix_ids.add(int(raw["ID"]))
+                    fetched_count += 1
+            if len(items) < 50:
+                last_reached = True
+                break
+
+        if last_reached or fetched_count == 0:
+            break
+        start += 2500
 
     if not live_bitrix_ids:
         return 0
@@ -364,6 +388,7 @@ def reconcile_deleted_deals(client: BitrixClient) -> int:
         logger.info(f"Reconciling deleted deals: removing {count} deals from local DB")
         deleted_qs.delete()
     return count
+
 
 
 
