@@ -601,12 +601,16 @@ def dashboard_entry(request):
     ensure_b2b_integrity()
     force_sync = request.GET.get("force") == "1"
     sync_error = ""
-    try:
-        if force_sync and can_force_sync(request.user):
-            _on_demand_sync_if_needed(force=True)
-    except requests.RequestException:
-        logger.exception("Bitrix24 on-demand sync failed")
-        sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
+    if force_sync and can_force_sync(request.user):
+        try:
+            from .tasks import sync_bitrix24_incremental
+            sync_bitrix24_incremental.delay()
+        except Exception:
+            logger.exception("Failed to launch background sync task, running inline fallback")
+            try:
+                _on_demand_sync_if_needed(force=True)
+            except requests.RequestException:
+                sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
 
     context = _dashboard_context(request)
     context["sync_error"] = sync_error
@@ -618,5 +622,11 @@ def dashboard_entry(request):
 def refresh_status(request):
     if not can_force_sync(request.user):
         return JsonResponse({"skipped": True, "reason": "forbidden"}, status=403)
-    result = _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
-    return JsonResponse(result)
+    try:
+        from .tasks import sync_bitrix24_incremental
+        sync_bitrix24_incremental.delay()
+        return JsonResponse({"skipped": False, "status": "started", "message": "Фоновая синхронизация запущена"})
+    except Exception:
+        result = _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
+        return JsonResponse(result)
+
