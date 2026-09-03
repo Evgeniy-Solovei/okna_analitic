@@ -119,8 +119,14 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
 
         if not skip_history:
             stats["stage_events"] = sync_deal_stage_history(client, deal_ids=changed_deal_ids)
-            stats["first_zz"] = rebuild_first_zz()
-        stats["daily_metrics"] = rebuild_manager_daily_metrics()
+            stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids if mode == "incremental" else None)
+
+        if mode == "incremental":
+            metric_start = timezone.localdate() - timedelta(days=60)
+            stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
+        else:
+            stats["daily_metrics"] = rebuild_manager_daily_metrics()
+
 
         set_sync_cursor(
             "bitrix24.modified_at",
@@ -467,9 +473,39 @@ def save_deal_stage_events(deal: CrmDeal, events) -> int:
 
 
 @transaction.atomic
-def rebuild_first_zz() -> int:
-    DealFirstZZ.objects.all().delete()
+def rebuild_first_zz(deal_ids: list[int] | None = None) -> int:
     zz_stages = set(CrmStage.objects.filter(is_zz=True).values_list("bitrix_id", flat=True))
+    if not zz_stages:
+        return 0
+
+    if deal_ids is not None:
+        if not deal_ids:
+            return 0
+        deals = list(CrmDeal.objects.filter(bitrix_id__in=deal_ids))
+        count = 0
+        for deal in deals:
+            event = (
+                DealStageEvent.objects.filter(deal=deal, stage_id_raw__in=zz_stages)
+                .select_related("stage", "assigned_by")
+                .order_by("changed_at", "id")
+                .first()
+            )
+            if event:
+                DealFirstZZ.objects.update_or_create(
+                    deal=deal,
+                    defaults={
+                        "first_zz_at": event.changed_at,
+                        "stage": event.stage,
+                        "assigned_by": event.assigned_by or deal.assigned_by,
+                        "source": "stage_history",
+                    },
+                )
+                count += 1
+            else:
+                DealFirstZZ.objects.filter(deal=deal).delete()
+        return count
+
+    DealFirstZZ.objects.all().delete()
     count = 0
     for deal_id in DealStageEvent.objects.filter(stage_id_raw__in=zz_stages).values_list("deal_id", flat=True).distinct():
         event = (
@@ -489,6 +525,7 @@ def rebuild_first_zz() -> int:
         )
         count += 1
     return count
+
 
 
 @transaction.atomic
