@@ -530,28 +530,24 @@ def rebuild_first_zz(deal_ids: list[int] | None = None) -> int:
 
 @transaction.atomic
 def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date | None = None) -> int:
-    qs = ManagerDailyMetric.objects.all()
-    if start_date:
-        qs = qs.filter(metric_date__gte=start_date)
-    if end_date:
-        qs = qs.filter(metric_date__lte=end_date)
-    qs.delete()
-
     buckets: dict[tuple[date, int, int], dict[str, Any]] = defaultdict(
         lambda: {"leads": 0, "target_leads": 0, "zz": 0, "contracts": 0, "contract_amount": Decimal("0")}
     )
 
     lead_qs = CrmLead.objects.exclude(assigned_by__isnull=True)
-    deal_qs = CrmDeal.objects.exclude(assigned_by__isnull=True).exclude(direction__isnull=True)
+    deal_target_qs = CrmDeal.objects.exclude(assigned_by__isnull=True).exclude(direction__isnull=True)
+    deal_contract_qs = CrmDeal.objects.exclude(assigned_by__isnull=True).exclude(direction__isnull=True).exclude(contract_date__isnull=True)
     zz_qs = DealFirstZZ.objects.select_related("deal", "assigned_by", "deal__direction").exclude(assigned_by__isnull=True).exclude(deal__direction__isnull=True)
 
     if start_date:
         lead_qs = lead_qs.filter(created_time__date__gte=start_date)
-        deal_qs = deal_qs.filter(created_time__date__gte=start_date)
+        deal_target_qs = deal_target_qs.filter(created_time__date__gte=start_date)
+        deal_contract_qs = deal_contract_qs.filter(contract_date__gte=start_date)
         zz_qs = zz_qs.filter(first_zz_at__date__gte=start_date)
     if end_date:
         lead_qs = lead_qs.filter(created_time__date__lte=end_date)
-        deal_qs = deal_qs.filter(created_time__date__lte=end_date)
+        deal_target_qs = deal_target_qs.filter(created_time__date__lte=end_date)
+        deal_contract_qs = deal_contract_qs.filter(contract_date__lte=end_date)
         zz_qs = zz_qs.filter(first_zz_at__date__lte=end_date)
 
     lead_direction_from_deal = {}
@@ -569,15 +565,23 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
             continue
         buckets[(lead.created_time.date(), lead.assigned_by_id, direction_id)]["leads"] += 1
 
-    for deal in deal_qs.only("created_time", "assigned_by_id", "direction_id", "contract_date", "contract_amount"):
+    for deal in deal_target_qs.only("created_time", "assigned_by_id", "direction_id"):
         buckets[(deal.created_time.date(), deal.assigned_by_id, deal.direction_id)]["target_leads"] += 1
-        if deal.contract_date:
-            contract_bucket = buckets[(deal.contract_date, deal.assigned_by_id, deal.direction_id)]
-            contract_bucket["contracts"] += 1
-            contract_bucket["contract_amount"] += deal.contract_amount
+
+    for deal in deal_contract_qs.only("contract_date", "assigned_by_id", "direction_id", "contract_amount"):
+        b = buckets[(deal.contract_date, deal.assigned_by_id, deal.direction_id)]
+        b["contracts"] += 1
+        b["contract_amount"] += deal.contract_amount
 
     for first_zz in zz_qs:
         buckets[(first_zz.first_zz_at.date(), first_zz.assigned_by_id, first_zz.deal.direction_id)]["zz"] += 1
+
+    if not start_date and not end_date:
+        ManagerDailyMetric.objects.all().delete()
+    else:
+        dates_to_rewrite = {key[0] for key in buckets.keys()}
+        if dates_to_rewrite:
+            ManagerDailyMetric.objects.filter(metric_date__in=dates_to_rewrite).delete()
 
     rows = [
         ManagerDailyMetric(
@@ -588,5 +592,12 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
         )
         for (metric_date, manager_id, direction_id), values in buckets.items()
     ]
-    ManagerDailyMetric.objects.bulk_create(rows, batch_size=1000)
+    ManagerDailyMetric.objects.bulk_create(
+        rows,
+        batch_size=1000,
+        update_conflicts=True,
+        unique_fields=["metric_date", "manager_id", "direction_id"],
+        update_fields=["leads", "target_leads", "zz", "contracts", "contract_amount"],
+    )
     return len(rows)
+
