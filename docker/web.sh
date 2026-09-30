@@ -21,8 +21,9 @@ echo "Starting gunicorn..."
 exec gunicorn config.wsgi:application \
   --chdir /app/backend \
   --bind 0.0.0.0:8000 \
-  --workers ${GUNICORN_WORKERS:-3} \
-  --timeout 60 \
+  --workers ${GUNICORN_WORKERS:-6} \
+  --timeout 30 \
+  --graceful-timeout 10 \
   --access-logfile - \
   --error-logfile - \
   --capture-output \

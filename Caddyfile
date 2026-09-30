@@ -1,26 +1,31 @@
 {$APP_DOMAIN:platform.oknapanorama.by} {
-    encode gzip
+	encode gzip
 
+	# Боты/сканеры долбят секреты и забивают gunicorn — режем до Django.
+	@scanners {
+		path_regexp scanner (?i)^/(\.git|\.env|\.aws|\.ssh|\.npmrc|\.htpasswd|Dockerfile|docker-compose|firebase|secrets?|credentials|terraform|serverless|service-?account|key\.json|cgi-bin|_profiler|actuator|feast|langflow|v1/graphql|api/v1/(validate|configs|build)|api/(auth|providers|datasources|usage)|exec-py|model/info)
+	}
+	respond @scanners 404
 
-    redir /admin /admin/ 308
+	redir /admin /admin/ 308
 
-    handle /health/* {
-        reverse_proxy django:8000
-    }
+	handle /health/* {
+		reverse_proxy django:8000
+	}
 
-    handle /refresh* {
-        reverse_proxy django:8000
-    }
+	handle /refresh* {
+		reverse_proxy django:8000
+	}
 
-    handle /accounts/* {
-        reverse_proxy django:8000
-    }
+	handle /accounts/* {
+		reverse_proxy django:8000
+	}
 
-    handle /admin/* {
-        reverse_proxy django:8000
-    }
+	handle /admin/* {
+		reverse_proxy django:8000
+	}
 
-    handle {
-        reverse_proxy django:8000
-    }
+	handle {
+		reverse_proxy django:8000
+	}
 }
