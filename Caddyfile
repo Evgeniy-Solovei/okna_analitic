@@ -1,7 +1,14 @@
+{
+	# HTTP/3 (QUIC) на этом хосте ломает загрузку: Django отдаёт HTML за ~50мс,
+	# а браузер висит 10+ секунд / «ожидает». В логах Caddy уже был UDP buffer warning.
+	servers {
+		protocols h1 h2
+	}
+}
+
 {$APP_DOMAIN:platform.oknapanorama.by} {
 	encode gzip
 
-	# Сканеры секретов — сразу рвём, до Django/gunicorn.
 	@scanners {
 		path /.git/*
 		path /.env*
@@ -43,14 +50,5 @@
 
 	redir /admin /admin/ 308
 
-	handle {
-		reverse_proxy django:8000 {
-			transport http {
-				dial_timeout 3s
-				response_header_timeout 25s
-				read_timeout 60s
-				write_timeout 60s
-			}
-		}
-	}
+	reverse_proxy django:8000
 }

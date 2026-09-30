@@ -18,16 +18,21 @@ class ShortWebQueryTimeoutMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        path = request.path or ""
+        # static/health не трогаем БД и не шумим в логах
+        if path.startswith("/static/") or path.startswith("/health"):
+            return self.get_response(request)
+
         request_id = f"{time.time_ns() % 10_000_000:07d}"
         request.analytics_request_id = request_id
-        path = request.get_full_path()
+        full_path = request.get_full_path()
         started = time.monotonic()
         _local.request_id = request_id
         _local.slow_sql = []
         _local.sql_count = 0
         _local.sql_total_ms = 0.0
 
-        logger.info("REQ START id=%s %s %s", request_id, request.method, path)
+        logger.info("REQ START id=%s %s %s", request_id, request.method, full_path)
 
         db_setup_ms = self._apply_timeouts()
         logger.info("REQ DBREADY id=%s setup_ms=%.0f", request_id, db_setup_ms)
@@ -48,7 +53,7 @@ class ShortWebQueryTimeoutMiddleware:
                 getattr(_local, "sql_count", 0),
                 getattr(_local, "sql_total_ms", 0.0),
                 exc,
-                path,
+                full_path,
             )
             if (
                 "statement timeout" in message
@@ -79,7 +84,7 @@ class ShortWebQueryTimeoutMiddleware:
                 getattr(_local, "sql_count", 0),
                 getattr(_local, "sql_total_ms", 0.0),
                 len(slow),
-                path,
+                full_path,
             )
             for item in slow[:8]:
                 logger.warning(

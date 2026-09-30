@@ -40,9 +40,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "apps.analytics.middleware.ShortWebQueryTimeoutMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "apps.analytics.middleware.ShortWebQueryTimeoutMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
