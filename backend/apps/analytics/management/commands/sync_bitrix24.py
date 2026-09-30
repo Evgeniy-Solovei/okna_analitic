@@ -17,4 +17,7 @@ class Command(BaseCommand):
 
         mode = "incremental" if options["incremental"] else "full"
         stats = run_bitrix24_sync(mode=mode, skip_history=options["skip_history"], source="bitrix24")
+        if stats.get("skipped"):
+            self.stdout.write(self.style.WARNING(f"Sync skipped: {stats}"))
+            return
         self.stdout.write(self.style.SUCCESS(f"Sync complete: {stats}"))

@@ -5,18 +5,16 @@ from urllib.parse import urlencode
 import requests
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.db import connection
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import ExtractHour
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric
+from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric, MeasurerDailyMetric
 from .roles import can_force_sync, get_user_allowed_directions, resolve_manager_filters, user_is_admin, user_is_manager_only
 from .services import (
     bitrix_datetime,
-    ensure_b2b_integrity,
     get_sync_cursor,
     parse_bitrix_datetime,
     run_bitrix24_sync,
@@ -25,18 +23,6 @@ from .services import (
 
 
 logger = logging.getLogger(__name__)
-SYNC_LOCK_ID = 24062026
-
-
-def _try_advisory_lock() -> bool:
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT pg_try_advisory_lock(%s)", [SYNC_LOCK_ID])
-        return bool(cursor.fetchone()[0])
-
-
-def _release_advisory_lock():
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT pg_advisory_unlock(%s)", [SYNC_LOCK_ID])
 
 
 def _on_demand_sync_if_needed(force: bool = False) -> dict:
@@ -54,15 +40,12 @@ def _on_demand_sync_if_needed(force: bool = False) -> dict:
     if not force and last_at and now - last_at < min_interval:
         return {"skipped": True, "reason": "recent", "last_at": last_value}
 
-    if not _try_advisory_lock():
-        return {"skipped": True, "reason": "locked"}
-
-    try:
-        stats = run_bitrix24_sync(mode="incremental", source="bitrix24_on_demand")
-        set_sync_cursor("bitrix24.on_demand_last_at", bitrix_datetime(now), {"stats": stats})
-        return {"skipped": False, "stats": stats}
-    finally:
-        _release_advisory_lock()
+    # Advisory lock живёт внутри run_bitrix24_sync (общий с celery).
+    stats = run_bitrix24_sync(mode="incremental", source="bitrix24_on_demand")
+    if stats.get("skipped"):
+        return stats
+    set_sync_cursor("bitrix24.on_demand_last_at", bitrix_datetime(now), {"stats": stats})
+    return {"skipped": False, "stats": stats}
 
 
 def _parse_date_param(value):
@@ -93,6 +76,8 @@ def _url_with(filters, **overrides):
         params["manager"] = filters["manager_ids"]
     if filters.get("exclude_manager_ids"):
         params["exclude_manager"] = filters["exclude_manager_ids"]
+    if filters.get("measurer_ids"):
+        params["measurer"] = filters["measurer_ids"]
     if filters["direction_ids"]:
         params["direction"] = filters["direction_ids"]
     if filters.get("detail"):
@@ -104,6 +89,10 @@ def _url_with(filters, **overrides):
         else:
             params[key] = value
     return "?" + urlencode(params, doseq=True)
+
+
+def _section_url(path, filters, **overrides):
+    return path + _url_with(filters, **overrides)
 
 
 def _apply_manager_qs(qs, filters, field="manager_id"):
@@ -491,6 +480,13 @@ def _dashboard_context(request):
 
     manager_all_url = _url_with(filters, manager=[])
     exclude_all_url = _url_with(filters, exclude_manager=[])
+    measurers_url = _section_url(
+        "/measurers/",
+        filters,
+        detail=None,
+        manager=None,
+        exclude_manager=None,
+    )
     return {
         "totals": totals,
         "filters": filters,
@@ -522,6 +518,9 @@ def _dashboard_context(request):
         "is_manager_only": user_is_manager_only(request.user),
         "detail_close_url": _url_with(filters, detail=None),
         "can_force_sync": can_force_sync(request.user),
+        "active_section": "managers",
+        "managers_url": "/",
+        "measurers_url": measurers_url,
     }
 
 
@@ -596,6 +595,201 @@ def _hourly_rows_for_selected_date(filters):
     return rows
 
 
+def _base_measurer_metric_queryset(request):
+    qs = MeasurerDailyMetric.objects.select_related("measurer", "direction")
+    date_from = _parse_date_param(request.GET.get("date_from"))
+    date_to = _parse_date_param(request.GET.get("date_to"))
+    selected_date = _parse_date_param(request.GET.get("date"))
+    measurer_ids = _ids_from_request(request, "measurer")
+    requested_direction_ids = _ids_from_request(request, "direction")
+
+    user_allowed_directions = get_user_allowed_directions(request.user)
+    available_direction_ids = list(user_allowed_directions.values_list("id", flat=True))
+
+    direction_id = next(
+        (item for item in requested_direction_ids if item in available_direction_ids),
+        None,
+    )
+    if direction_id is None:
+        direction_id = (
+            user_allowed_directions.filter(code=BusinessDirection.Code.PANORAMA)
+            .values_list("id", flat=True)
+            .first()
+        )
+    if direction_id is None and available_direction_ids:
+        direction_id = available_direction_ids[0]
+    direction_ids = [direction_id] if direction_id is not None else []
+
+    if selected_date:
+        qs = qs.filter(metric_date=selected_date)
+    else:
+        if not date_from and not date_to:
+            today = timezone.localdate()
+            date_from = today.replace(day=1)
+            date_to = today
+        if date_from:
+            qs = qs.filter(metric_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(metric_date__lte=date_to)
+
+    if measurer_ids:
+        qs = qs.filter(measurer_id__in=measurer_ids)
+    if direction_ids:
+        qs = qs.filter(direction_id__in=direction_ids)
+
+    filters = {
+        "date_from": date_from,
+        "date_to": date_to,
+        "selected_date": selected_date,
+        "manager_ids": [],
+        "exclude_manager_ids": [],
+        "measurer_ids": measurer_ids,
+        "direction_ids": direction_ids,
+        "detail": "",
+    }
+    return qs, filters
+
+
+def _sum_measurer_metrics(qs):
+    totals = qs.aggregate(
+        measures=Sum("measures"),
+        contracts=Sum("contracts"),
+        contract_amount=Sum("contract_amount"),
+    )
+    for key, value in totals.items():
+        totals[key] = value or 0
+    totals["conversion"] = (
+        round(float(totals["contracts"]) * 100 / float(totals["measures"]), 1) if totals["measures"] else 0
+    )
+    totals["avg_check"] = (
+        round(float(totals["contract_amount"]) / float(totals["contracts"])) if totals["contracts"] else 0
+    )
+    return totals
+
+
+def _enrich_measurer_row(row):
+    measures = row.get("measures") or 0
+    contracts = row.get("contracts") or 0
+    row["conversion"] = round(float(contracts) * 100 / float(measures), 1) if measures else 0
+    row["avg_check"] = (
+        round(float(row.get("contract_amount") or 0) / float(contracts)) if contracts else 0
+    )
+    return row
+
+
+def _measurer_rows(qs, filters):
+    rows = list(
+        qs.values("measurer_id", "measurer__name")
+        .annotate(
+            measures=Sum("measures"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        .order_by("-contract_amount", "measurer__name")
+    )
+    for row in rows:
+        _enrich_measurer_row(row)
+        row["url"] = _url_with(filters, measurer=[row["measurer_id"]])
+    return rows
+
+
+def _measurer_daily_rows(qs, filters):
+    rows = list(
+        qs.values("metric_date")
+        .annotate(
+            measures=Sum("measures"),
+            contracts=Sum("contracts"),
+            contract_amount=Sum("contract_amount"),
+        )
+        .order_by("metric_date")
+    )
+    for row in rows:
+        measures = row.get("measures") or 0
+        contracts = row.get("contracts") or 0
+        row["conversion"] = round(float(contracts) * 100 / float(measures), 1) if measures else 0
+        row["url"] = _url_with(
+            filters,
+            date=row["metric_date"].isoformat(),
+            date_from=None,
+            date_to=None,
+        )
+    return rows
+
+
+def _measurers_dashboard_context(request):
+    qs, filters = _base_measurer_metric_queryset(request)
+    totals = _sum_measurer_metrics(qs)
+    measurer_rows = _measurer_rows(qs, filters)
+
+    conversion_rows = _bar_rows(
+        sorted(measurer_rows, key=lambda item: item["conversion"], reverse=True),
+        "conversion",
+    )
+    measures_rows = _bar_rows(
+        sorted(measurer_rows, key=lambda item: item["measures"] or 0, reverse=True),
+        "measures",
+    )
+    amount_rows = _bar_rows(list(measurer_rows), "contract_amount")
+    daily_rows = _measurer_daily_rows(qs, filters)
+
+    selected_measurers = list(CrmUser.objects.filter(id__in=filters["measurer_ids"]).order_by("name"))
+    selected_directions = list(BusinessDirection.objects.filter(id__in=filters["direction_ids"]).order_by("name"))
+    selected_measurer_title = _selection_title(selected_measurers, "Все замерщики")
+    selected_direction_title = _selection_title(selected_directions, "Направление не настроено")
+
+    chart_data = {
+        "daily": [
+            {
+                "label": row["metric_date"].strftime("%d.%m"),
+                "date": row["metric_date"].isoformat(),
+                "measures": int(row["measures"] or 0),
+                "contracts": int(row["contracts"] or 0),
+                "contract_amount": float(row.get("contract_amount") or 0),
+                "conversion": float(row.get("conversion") or 0),
+                "url": row.get("url", ""),
+            }
+            for row in daily_rows
+        ],
+        "conversion": [
+            {"label": row["measurer__name"], "value": float(row["conversion"] or 0), "url": row["url"]}
+            for row in conversion_rows
+        ],
+        "measures": [
+            {"label": row["measurer__name"], "value": int(row["measures"] or 0), "url": row["url"]}
+            for row in measures_rows
+        ],
+        "amounts": [
+            {"label": row["measurer__name"], "value": float(row["contract_amount"] or 0), "url": row["url"]}
+            for row in amount_rows
+        ],
+    }
+
+    return {
+        "totals": totals,
+        "filters": filters,
+        "measurers": CrmUser.objects.filter(
+            id__in=MeasurerDailyMetric.objects.values_list("measurer_id", flat=True).distinct()
+        ).order_by("name"),
+        "directions": get_user_allowed_directions(request.user).order_by("name"),
+        "selected_measurers": selected_measurers,
+        "selected_directions": selected_directions,
+        "selected_measurer_title": selected_measurer_title,
+        "selected_direction_title": selected_direction_title,
+        "measurer_all_url": _url_with(filters, measurer=[]),
+        "measurer_rows": measurer_rows,
+        "conversion_rows": conversion_rows,
+        "measures_rows": measures_rows,
+        "amount_rows": amount_rows,
+        "daily_rows": daily_rows,
+        "chart_data": chart_data,
+        "show_admin_link": user_is_admin(request.user),
+        "can_force_sync": can_force_sync(request.user),
+        "active_section": "measurers",
+        "managers_url": _section_url("/", filters, measurer=None, detail=None),
+        "measurers_url": _section_url("/measurers/", filters),
+    }
+
+
 @login_required
 def dashboard_entry(request):
     force_sync = request.GET.get("force") == "1"
@@ -616,6 +810,24 @@ def dashboard_entry(request):
     context["sync_error"] = sync_error
     return render(request, "analytics/native_dashboard.html", context)
 
+
+@login_required
+def measurers_dashboard_entry(request):
+    force_sync = request.GET.get("force") == "1"
+    sync_error = ""
+    if force_sync and can_force_sync(request.user):
+        try:
+            from .tasks import sync_bitrix24_incremental
+            sync_bitrix24_incremental.delay()
+        except Exception:
+            try:
+                _on_demand_sync_if_needed(force=True)
+            except Exception:
+                sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
+
+    context = _measurers_dashboard_context(request)
+    context["sync_error"] = sync_error
+    return render(request, "analytics/native_dashboard_measurers.html", context)
 
 
 @login_required

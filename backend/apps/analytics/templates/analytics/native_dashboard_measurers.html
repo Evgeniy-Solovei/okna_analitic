@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Конверсия замерщиков</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #fff;
+      --text: #172033;
+      --muted: #667085;
+      --line: #d9e2ef;
+      --soft: #f0f5ff;
+      --blue: #2f80ed;
+      --green: #65a30d;
+      --orange: #e58a2a;
+      --red: #d76b72;
+      --violet: #7168b8;
+    }
+    body[data-theme="dark"] {
+      --bg: #07111c;
+      --panel: #0d1a27;
+      --text: #edf4ff;
+      --muted: #9fb0c5;
+      --line: #213346;
+      --soft: #13283d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    a { color: inherit; text-decoration: none; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px 28px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1 { margin: 0; font-size: 28px; line-height: 1.15; }
+    h1 a:hover { color: var(--blue); }
+    .subtitle { margin-top: 6px; color: var(--muted); font-size: 15px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .button {
+      min-height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    body[data-theme="dark"] .button,
+    body[data-theme="dark"] input,
+    body[data-theme="dark"] .multi-select summary,
+    body[data-theme="dark"] .multi-menu { background: #0f2030; color: var(--text); }
+    .button.primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+    .logout-form { margin: 0; }
+    .page { width: min(1600px, 100%); margin: 0 auto; padding: 22px 26px 40px; }
+    .section-nav { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .section-nav a {
+      display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px;
+      border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-weight: 650;
+    }
+    .section-nav a.active { border-color: var(--blue); background: var(--soft); color: var(--blue); }
+    .filters {
+      display: grid;
+      grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) auto minmax(180px, 1.2fr) minmax(180px, 1.2fr) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 700; }
+    input[type="date"], .multi-select summary, input[type="text"] {
+      width: 100%; min-height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font: inherit; color: var(--text);
+    }
+    .multi-select { position: relative; }
+    .multi-select summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+    .multi-select summary::-webkit-details-marker { display: none; }
+    .multi-menu {
+      position: absolute; z-index: 10; top: 44px; left: 0; right: 0; max-height: 360px; overflow: hidden;
+      display: flex; flex-direction: column; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+      background: #fff; box-shadow: 0 16px 36px rgba(23, 32, 51, 0.14);
+    }
+    .multi-options { flex: 1 1 auto; min-height: 0; max-height: 250px; overflow-y: auto; }
+    .check-row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 5px 6px; border-radius: 4px; font-size: 14px; cursor: pointer; }
+    .check-row:hover { background: var(--soft); }
+    .check-row.all-option { border-bottom: 1px solid var(--line); margin-bottom: 6px; padding: 10px 8px; color: var(--blue); font-weight: 700; }
+    .multi-actions { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+    .kpi, .card { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .kpi { padding: 14px; min-height: 92px; }
+    .kpi-label { color: var(--muted); font-size: 13px; font-weight: 700; }
+    .kpi-value { margin-top: 10px; font-size: 25px; line-height: 1.15; font-weight: 800; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+    .card { min-width: 0; padding: 16px; overflow-x: auto; }
+    .card.wide { grid-column: 1 / -1; }
+    .card h2 { margin: 0 0 14px; font-size: 18px; line-height: 1.25; }
+    .chart-box { position: relative; width: 100%; height: 320px; min-height: 260px; }
+    .chart-box.small { height: 340px; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .legend { display: flex; gap: 14px; margin-top: 12px; color: var(--muted); font-size: 13px; font-weight: 650; }
+    .dot { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 50%; vertical-align: middle; }
+    .measures { background: var(--blue); }
+    .contracts { background: var(--green); }
+    table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .metric-table td:not(:first-child), .metric-table th:not(:first-child) { text-align: right; }
+    .metric-table tbody tr:hover { background: var(--soft); }
+    .metric-table tr.total-row td { font-weight: 800; background: var(--soft); border-top: 2px solid var(--line); }
+    th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .empty { padding: 26px; color: var(--muted); text-align: center; }
+    .scroll-hint { display: none; margin: -4px 0 10px; color: var(--muted); font-size: 12px; font-weight: 650; }
+    @media (max-width: 1180px) {
+      .filters { grid-template-columns: 1fr 1fr; }
+      .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .topbar { flex-direction: column; align-items: stretch; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .scroll-hint { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1><a href="{% url 'measurers_dashboard' %}">Конверсия замерщиков</a></h1>
+      <div class="subtitle">{{ selected_direction_title }}: замеры по дате замера, договоры по дате договора</div>
+    </div>
+    <nav class="actions" aria-label="Действия">
+      {% if can_force_sync %}
+        <a class="button primary" href="?{% if request.GET %}{{ request.GET.urlencode }}&{% endif %}force=1">Обновить данные</a>
+      {% endif %}
+      <button class="button" type="button" id="themeToggle">Тема</button>
+      <form class="logout-form" method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button class="button" type="submit">Выйти</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="page">
+    <nav class="section-nav" aria-label="Разделы дашборда">
+      <a href="{{ managers_url }}">Менеджеры</a>
+      <a href="{{ measurers_url }}" class="active">Замерщики</a>
+    </nav>
+
+    {% if sync_error %}
+      <div class="card" style="margin-bottom:16px;color:#b45309;">{{ sync_error }}</div>
+    {% endif %}
+
+    <form class="filters" method="get">
+      <div>
+        <label for="date_from">Дата с</label>
+        <input id="date_from" name="date_from" type="date" value="{{ filters.date_from|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label for="date_to">Дата по</label>
+        <input id="date_to" name="date_to" type="date" value="{{ filters.date_to|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button class="button primary" type="submit">Применить период</button>
+      </div>
+      <div>
+        <label for="measurer">Замерщик</label>
+        <details class="multi-select" id="measurer">
+          <summary>{{ selected_measurer_title }}</summary>
+          <div class="multi-menu">
+            <div class="multi-options">
+              <a class="check-row all-option" href="{{ measurer_all_url }}">Все замерщики</a>
+              {% for measurer in measurers %}
+                <label class="check-row">
+                  <input type="checkbox" name="measurer" value="{{ measurer.id }}" {% if measurer.id in filters.measurer_ids %}checked{% endif %}>
+                  <span>{{ measurer.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            <div class="multi-actions">
+              <button class="button primary" type="submit">Применить фильтр</button>
+            </div>
+          </div>
+        </details>
+      </div>
+      <div>
+        <label for="direction">Направление</label>
+        {% if directions|length > 1 %}
+        <details class="multi-select" id="direction">
+          <summary>{{ selected_direction_title }}</summary>
+          <div class="multi-menu">
+            <div class="multi-options">
+              {% for direction in directions %}
+                <label class="check-row">
+                  <input type="radio" name="direction" value="{{ direction.id }}" {% if direction.id in filters.direction_ids %}checked{% endif %}>
+                  <span>{{ direction.name }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            <div class="multi-actions">
+              <button class="button primary" type="submit">Применить фильтр</button>
+            </div>
+          </div>
+        </details>
+        {% else %}
+        <input type="text" value="{{ selected_direction_title }}" readonly style="background: var(--soft); font-weight: 600; cursor: not-allowed;">
+        {% endif %}
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <a class="button" href="{% url 'measurers_dashboard' %}">Сбросить</a>
+      </div>
+    </form>
+
+    <section class="kpis" aria-label="Показатели">
+      <div class="kpi card"><div class="kpi-label">Замеры</div><div class="kpi-value">{{ totals.measures }}</div></div>
+      <div class="kpi card"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></div>
+      <div class="kpi card"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></div>
+      <div class="kpi card"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount|floatformat:0 }}</div></div>
+      <div class="kpi card"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check|floatformat:0 }}</div></div>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Динамика замеров и договоров по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box"><canvas id="dailyChart"></canvas></div>
+          <div class="legend">
+            <span><span class="dot measures"></span>Замеры</span>
+            <span><span class="dot contracts"></span>Договоры</span>
+          </div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>Конверсия по замерщикам</h2>
+        {% if conversion_rows %}
+          <div class="chart-box small"><canvas id="conversionChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>Сумма договоров по замерщикам</h2>
+        {% if amount_rows %}
+          <div class="chart-box small"><canvas id="amountChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
+      </article>
+
+      <article class="card">
+        <h2>Замеры по замерщикам</h2>
+        {% if measures_rows %}
+          <div class="chart-box small"><canvas id="measuresChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных.</div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Конверсия по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box"><canvas id="dailyConversionChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+      <article class="card wide">
+        <h2>Сумма договоров по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box"><canvas id="dailyAmountChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+      <article class="card wide">
+        <h2>Замеры по дням</h2>
+        {% if daily_rows %}
+          <div class="chart-box"><canvas id="dailyMeasuresChart"></canvas></div>
+        {% else %}
+          <div class="empty">Нет данных за выбранный период.</div>
+        {% endif %}
+      </article>
+    </section>
+
+    <section class="grid">
+      <article class="card wide">
+        <h2>Замерщики</h2>
+        <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
+        <table class="metric-table">
+          <thead>
+            <tr>
+              <th>ФИО (роль)</th>
+              <th>Замеры, шт.</th>
+              <th>Договоры, шт.</th>
+              <th>Конверсия, %</th>
+              <th>Сумма договоров, ₽</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in measurer_rows %}
+              <tr>
+                <td><strong>{{ row.measurer__name }} (замерщик)</strong></td>
+                <td>{{ row.measures }}</td>
+                <td>{{ row.contracts }}</td>
+                <td>{{ row.conversion }}</td>
+                <td>{{ row.contract_amount|floatformat:0 }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="empty">Нет данных. После деплоя: migrate → sync → rebuild_metrics.</td></tr>
+            {% endfor %}
+            {% if measurer_rows %}
+              <tr class="total-row">
+                <td><strong>ИТОГО</strong></td>
+                <td>{{ totals.measures }}</td>
+                <td>{{ totals.contracts }}</td>
+                <td>{{ totals.conversion }}</td>
+                <td>{{ totals.contract_amount|floatformat:0 }}</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  {{ chart_data|json_script:"chart-data" }}
+  <script>
+    const savedTheme = localStorage.getItem("panorama-theme") || "light";
+    document.body.dataset.theme = savedTheme;
+    const chartData = JSON.parse(document.getElementById("chart-data").textContent);
+    const isDark = document.body.dataset.theme === "dark";
+    const isMobile = window.matchMedia("(max-width: 640px)").matches;
+    const colors = {
+      measures: "#2f80ed",
+      contracts: "#65a30d",
+      conversion: "#d76b72",
+      amount: "#7168b8",
+      grid: isDark ? "#213346" : "#d9e2ef",
+      text: isDark ? "#edf4ff" : "#172033",
+      muted: isDark ? "#9fb0c5" : "#667085"
+    };
+
+    document.getElementById("themeToggle").textContent = isDark ? "Светлая тема" : "Темная тема";
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      localStorage.setItem("panorama-theme", isDark ? "light" : "dark");
+      window.location.reload();
+    });
+
+    document.querySelectorAll(".multi-select").forEach(select => {
+      select.addEventListener("toggle", () => {
+        if (!select.open) return;
+        document.querySelectorAll(".multi-select[open]").forEach(openSelect => {
+          if (openSelect !== select) openSelect.open = false;
+        });
+      });
+    });
+
+    function money(value) {
+      return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
+    }
+
+    function drawDailyChart(rows) {
+      const canvas = document.getElementById("dailyChart");
+      if (!canvas || !rows.length || !window.Chart) return;
+      new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: rows.map(row => row.label),
+          datasets: [
+            { label: "Замеры", data: rows.map(row => row.measures), rows, borderColor: colors.measures, backgroundColor: colors.measures, tension: 0.25, borderWidth: 3, pointRadius: isMobile ? 2 : 3 },
+            { label: "Договоры", data: rows.map(row => row.contracts), rows, borderColor: colors.contracts, backgroundColor: colors.contracts, tension: 0.25, borderWidth: 3, pointRadius: isMobile ? 2 : 3 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => rows[items[0].dataIndex]?.date || "" } } },
+          scales: {
+            x: { grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
+            y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.muted } }
+          }
+        }
+      });
+    }
+
+    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !rows.length || !window.Chart) return;
+      const plugin = {
+        id: `barLabels_${canvasId}`,
+        afterDatasetsDraw(chart) {
+          const { ctx } = chart;
+          const dataset = chart.data.datasets[0];
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar, index) => {
+            const text = `${formatter(dataset.data[index])}${suffix}`;
+            const start = Math.min(bar.base, bar.x);
+            const end = Math.max(bar.base, bar.x);
+            const width = end - start;
+            ctx.save();
+            ctx.font = "bold 11px Inter, sans-serif";
+            ctx.textBaseline = "middle";
+            if (width >= 36) {
+              ctx.fillStyle = "#fff";
+              ctx.textAlign = "center";
+              ctx.fillText(text, start + width / 2, bar.y);
+            } else {
+              ctx.fillStyle = colors.text;
+              ctx.textAlign = "left";
+              ctx.fillText(text, end + 6, bar.y);
+            }
+            ctx.restore();
+          });
+        }
+      };
+      new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels: rows.map(row => row.label),
+          datasets: [{ data: rows.map(row => row.value), rows, backgroundColor: color, borderRadius: 5, barThickness: 18 }]
+        },
+        plugins: [plugin],
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: { padding: { right: 72 } },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: item => `${formatter(item.raw)}${suffix}` } }
+          },
+          scales: {
+            x: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` } },
+            y: { grid: { display: false }, ticks: { color: colors.text, autoSkip: false } }
+          }
+        }
+      });
+    }
+
+    function drawDailyMetric(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas || !rows.length || !window.Chart) return;
+      new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: rows.map(row => row.label),
+          datasets: [{
+            data: rows.map(row => row[valueKey]),
+            rows,
+            borderColor: color,
+            backgroundColor: color,
+            tension: 0.25,
+            borderWidth: 3,
+            pointRadius: isMobile ? 2 : 3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: items => rows[items[0].dataIndex]?.date || items[0].label,
+                label: item => `${formatter(item.raw)}${suffix}`
+              }
+            }
+          },
+          scales: {
+            x: { offset: true, grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
+            y: {
+              beginAtZero: true,
+              grid: { color: colors.grid },
+              ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` }
+            }
+          }
+        }
+      });
+    }
+
+    drawDailyChart(chartData.daily || []);
+    drawHorizontalBars("conversionChart", chartData.conversion || [], colors.conversion, "%", value => Number(value).toFixed(1));
+    drawHorizontalBars("amountChart", chartData.amounts || [], colors.amount, "", money);
+    drawHorizontalBars("measuresChart", chartData.measures || [], colors.measures, "", value => value);
+    drawDailyMetric("dailyConversionChart", chartData.daily || [], "conversion", colors.conversion, "%", value => Number(value).toFixed(1));
+    drawDailyMetric("dailyAmountChart", chartData.daily || [], "contract_amount", colors.amount, "", money);
+    drawDailyMetric("dailyMeasuresChart", chartData.daily || [], "measures", colors.measures, "", value => value);
+  </script>
+</body>
+</html>

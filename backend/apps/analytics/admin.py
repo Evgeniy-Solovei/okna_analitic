@@ -13,6 +13,7 @@ from .models import (
     DealFirstZZ,
     DealStageEvent,
     ManagerDailyMetric,
+    MeasurerDailyMetric,
     SyncCursor,
     SyncRun,
 )
@@ -77,8 +78,20 @@ class CrmLeadAdmin(admin.ModelAdmin):
 
 @admin.register(CrmDeal)
 class CrmDealAdmin(admin.ModelAdmin):
-    list_display = ("bitrix_id", "title", "pipeline", "stage", "created_time", "assigned_by", "direction", "contract_number", "contract_date", "contract_amount")
-    list_filter = ("pipeline", "stage", "direction")
+    list_display = (
+        "bitrix_id",
+        "title",
+        "pipeline",
+        "stage",
+        "created_time",
+        "assigned_by",
+        "measurer",
+        "direction",
+        "contract_number",
+        "contract_date",
+        "contract_amount",
+    )
+    list_filter = ("pipeline", "stage", "direction", "measurer")
     search_fields = ("bitrix_id", "title", "contract_number")
     date_hierarchy = "created_time"
 
@@ -94,6 +107,13 @@ class DealStageEventAdmin(admin.ModelAdmin):
 class DealFirstZZAdmin(admin.ModelAdmin):
     list_display = ("deal", "first_zz_at", "stage", "assigned_by", "source")
     date_hierarchy = "first_zz_at"
+
+
+@admin.register(MeasurerDailyMetric)
+class MeasurerDailyMetricAdmin(admin.ModelAdmin):
+    list_display = ("metric_date", "measurer", "direction", "measures", "contracts", "contract_amount")
+    list_filter = ("direction", "measurer")
+    date_hierarchy = "metric_date"
 
 
 @admin.register(ManagerDailyMetric)

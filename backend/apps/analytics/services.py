@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -26,9 +26,24 @@ from .models import (
     DealFirstZZ,
     DealStageEvent,
     ManagerDailyMetric,
+    MeasurerDailyMetric,
     SyncCursor,
     SyncRun,
 )
+
+# Единый lock для celery / on-demand / management-команд — без параллельных sync.
+SYNC_LOCK_ID = 24062026
+
+
+def _try_advisory_lock() -> bool:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_try_advisory_lock(%s)", [SYNC_LOCK_ID])
+        return bool(cursor.fetchone()[0])
+
+
+def _release_advisory_lock() -> None:
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_unlock(%s)", [SYNC_LOCK_ID])
 
 
 def parse_bitrix_datetime(value: str | None):
@@ -49,6 +64,17 @@ def decimal_from_bitrix(value: Any) -> Decimal:
     return Decimal(str(value).replace(",", "."))
 
 
+def _unwrap_bitrix_scalar(value: Any):
+    """Bitrix employee/list UF часто приходит как ['123'] или вложенный список."""
+    while isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        value = value[0]
+    if value in (None, "", 0, "0"):
+        return None
+    return value
+
+
 def contract_date_from_deal(raw: dict[str, Any]):
     """Read the contract date from the field used by the deal's funnel."""
     default_field = settings.BITRIX24["DEAL_CONTRACT_DATE_FIELD"]
@@ -61,7 +87,39 @@ def contract_date_from_deal(raw: dict[str, Any]):
     value = raw.get(selected_field) if selected_field else None
     if not value and selected_field != default_field and default_field:
         value = raw.get(default_field)
-    return parse_bitrix_date(value)
+    return parse_bitrix_date(_unwrap_bitrix_scalar(value))
+
+
+def _is_ro_deal(raw: dict[str, Any]) -> bool:
+    return str(raw.get("CATEGORY_ID", "0")) == str(settings.BITRIX24["RO_PIPELINE_ID"])
+
+
+def measure_datetime_from_deal(raw: dict[str, Any]):
+    """Дата/время замера: отдельные UF для Панорамы и РО."""
+    default_field = settings.BITRIX24.get("DEAL_MEASURE_DATETIME_FIELD")
+    ro_field = settings.BITRIX24.get("RO_DEAL_MEASURE_DATETIME_FIELD")
+    selected_field = ro_field if _is_ro_deal(raw) else default_field
+    value = raw.get(selected_field) if selected_field else None
+    if not value and selected_field != default_field and default_field:
+        value = raw.get(default_field)
+    return parse_bitrix_datetime(_unwrap_bitrix_scalar(value))
+
+
+def measurer_from_deal(raw: dict[str, Any]):
+    """Замерщик: отдельные UF для Панорамы и РО, с fallback."""
+    default_field = settings.BITRIX24.get("DEAL_MEASURER_FIELD")
+    ro_field = settings.BITRIX24.get("RO_DEAL_MEASURER_FIELD")
+    selected_field = ro_field if _is_ro_deal(raw) else default_field
+    value = raw.get(selected_field) if selected_field else None
+    if not value and selected_field != default_field and default_field:
+        value = raw.get(default_field)
+    value = _unwrap_bitrix_scalar(value)
+    if not value:
+        return None
+    try:
+        return CrmUser.objects.filter(bitrix_id=int(value)).first()
+    except (TypeError, ValueError):
+        return None
 
 
 def bitrix_datetime(value: datetime) -> str:
@@ -94,6 +152,10 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
     if mode not in {"full", "incremental"}:
         raise ValueError("mode must be 'full' or 'incremental'")
 
+    if not _try_advisory_lock():
+        logger.info("Bitrix sync skipped: advisory lock busy (source=%s mode=%s)", source, mode)
+        return {"skipped": True, "reason": "locked", "source": source, "mode": mode}
+
     run_started_at = timezone.now()
     run = SyncRun.objects.create(source=source)
     stats: dict[str, Any] = {}
@@ -111,7 +173,6 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
         stats["deals"] = sync_deals(client, modified_from=modified_from)
         stats["reconciled_deleted_deals"] = reconcile_deleted_deals(client)
 
-
         changed_deal_ids = None
         if mode == "incremental":
             changed_deal_ids = list(CrmDeal.objects.filter(updated_at__gte=run_started_at).values_list("bitrix_id", flat=True))
@@ -124,9 +185,10 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
         if mode == "incremental":
             metric_start = timezone.localdate() - timedelta(days=60)
             stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
+            stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics(start_date=metric_start)
         else:
             stats["daily_metrics"] = rebuild_manager_daily_metrics()
-
+            stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics()
 
         set_sync_cursor(
             "bitrix24.modified_at",
@@ -140,6 +202,8 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
         run.error = str(exc)
         run.save(update_fields=["status", "finished_at", "stats", "error", "updated_at"])
         raise
+    finally:
+        _release_advisory_lock()
 
     run.status = SyncRun.Status.SUCCESS
     run.finished_at = timezone.now()
@@ -279,6 +343,9 @@ def ensure_b2b_integrity() -> bool:
         if ManagerDailyMetric.objects.filter(direction=b2b_direction).exists():
             ManagerDailyMetric.objects.filter(direction=b2b_direction).delete()
             changed = True
+        if MeasurerDailyMetric.objects.filter(direction=b2b_direction).exists():
+            MeasurerDailyMetric.objects.filter(direction=b2b_direction).delete()
+            changed = True
 
         if b2b_direction.is_active:
             b2b_direction.is_active = False
@@ -286,6 +353,7 @@ def ensure_b2b_integrity() -> bool:
 
     if changed:
         rebuild_manager_daily_metrics()
+        rebuild_measurer_daily_metrics()
     return changed
 
 
@@ -349,6 +417,8 @@ def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
                 "contract_number": str(raw.get(contract_number_field) or "") if contract_number_field else "",
                 "contract_date": contract_date_from_deal(raw),
                 "contract_amount": decimal_from_bitrix(raw.get(contract_amount_field)),
+                "measurer": measurer_from_deal(raw),
+                "measure_scheduled_at": measure_datetime_from_deal(raw),
                 "raw": raw,
             },
         )
@@ -579,9 +649,14 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
     if not start_date and not end_date:
         ManagerDailyMetric.objects.all().delete()
     else:
-        dates_to_rewrite = {key[0] for key in buckets.keys()}
-        if dates_to_rewrite:
-            ManagerDailyMetric.objects.filter(metric_date__in=dates_to_rewrite).delete()
+        # Чистим всё окно периода, иначе «пустые» дни и снятые менеджеры
+        # оставляют устаревшие строки при инкрементальном rebuild.
+        stale_qs = ManagerDailyMetric.objects.all()
+        if start_date:
+            stale_qs = stale_qs.filter(metric_date__gte=start_date)
+        if end_date:
+            stale_qs = stale_qs.filter(metric_date__lte=end_date)
+        stale_qs.delete()
 
     rows = [
         ManagerDailyMetric(
@@ -598,6 +673,73 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
         update_conflicts=True,
         unique_fields=["metric_date", "manager_id", "direction_id"],
         update_fields=["leads", "target_leads", "zz", "contracts", "contract_amount"],
+    )
+    return len(rows)
+
+
+@transaction.atomic
+def rebuild_measurer_daily_metrics(start_date: date | None = None, end_date: date | None = None) -> int:
+    """
+    Замеры — по measure_scheduled_at (поле CRM «Дата и время замера» / «… РО»).
+    Договоры и сумма — по contract_date (день заключения договора).
+    Конверсия считается в отчёте как договоры / замеры.
+    """
+    buckets: dict[tuple[date, int, int], dict[str, Any]] = defaultdict(
+        lambda: {"measures": 0, "contracts": 0, "contract_amount": Decimal("0")}
+    )
+
+    measure_qs = (
+        CrmDeal.objects.exclude(measurer__isnull=True)
+        .exclude(direction__isnull=True)
+        .exclude(measure_scheduled_at__isnull=True)
+    )
+    contract_qs = (
+        CrmDeal.objects.exclude(measurer__isnull=True)
+        .exclude(direction__isnull=True)
+        .exclude(contract_date__isnull=True)
+    )
+
+    if start_date:
+        measure_qs = measure_qs.filter(measure_scheduled_at__date__gte=start_date)
+        contract_qs = contract_qs.filter(contract_date__gte=start_date)
+    if end_date:
+        measure_qs = measure_qs.filter(measure_scheduled_at__date__lte=end_date)
+        contract_qs = contract_qs.filter(contract_date__lte=end_date)
+
+    for deal in measure_qs.only("measure_scheduled_at", "measurer_id", "direction_id"):
+        measure_day = timezone.localtime(deal.measure_scheduled_at).date()
+        buckets[(measure_day, deal.measurer_id, deal.direction_id)]["measures"] += 1
+
+    for deal in contract_qs.only("contract_date", "measurer_id", "direction_id", "contract_amount"):
+        bucket = buckets[(deal.contract_date, deal.measurer_id, deal.direction_id)]
+        bucket["contracts"] += 1
+        bucket["contract_amount"] += deal.contract_amount
+
+    if not start_date and not end_date:
+        MeasurerDailyMetric.objects.all().delete()
+    else:
+        stale_qs = MeasurerDailyMetric.objects.all()
+        if start_date:
+            stale_qs = stale_qs.filter(metric_date__gte=start_date)
+        if end_date:
+            stale_qs = stale_qs.filter(metric_date__lte=end_date)
+        stale_qs.delete()
+
+    rows = [
+        MeasurerDailyMetric(
+            metric_date=metric_date,
+            measurer_id=measurer_id,
+            direction_id=direction_id,
+            **values,
+        )
+        for (metric_date, measurer_id, direction_id), values in buckets.items()
+    ]
+    MeasurerDailyMetric.objects.bulk_create(
+        rows,
+        batch_size=1000,
+        update_conflicts=True,
+        unique_fields=["metric_date", "measurer_id", "direction_id"],
+        update_fields=["measures", "contracts", "contract_amount"],
     )
     return len(rows)
 

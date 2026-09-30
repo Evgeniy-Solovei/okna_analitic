@@ -113,6 +113,30 @@
       padding: 22px 26px 40px;
     }
 
+    .section-nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .section-nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      padding: 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      font-weight: 650;
+    }
+
+    .section-nav a.active {
+      border-color: var(--blue);
+      background: var(--soft);
+      color: var(--blue);
+    }
+
     .filters {
       display: grid;
       grid-template-columns:
@@ -816,6 +840,10 @@
   </header>
 
   <main class="page">
+    <nav class="section-nav" aria-label="Разделы дашборда">
+      <a href="{{ managers_url|default:'/' }}" class="active">Менеджеры</a>
+      <a href="{{ measurers_url|default:'/measurers/' }}">Замерщики</a>
+    </nav>
     {% if sync_error %}
       <div class="card" style="margin-bottom:16px;color:#b45309;">{{ sync_error }}</div>
     {% endif %}

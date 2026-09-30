@@ -126,6 +126,15 @@ class CrmDeal(TimestampedModel):
     contract_number = models.CharField(max_length=255, blank=True, db_index=True, verbose_name="Номер договора")
     contract_date = models.DateField(null=True, blank=True, verbose_name="Дата договора")
     contract_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0, verbose_name="Сумма договора")
+    measurer = models.ForeignKey(
+        CrmUser,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="measured_deals",
+        verbose_name="Замерщик",
+    )
+    measure_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name="Дата и время замера")
     raw = models.JSONField(default=dict, blank=True, verbose_name="Сырые данные")
 
     class Meta:
@@ -137,6 +146,8 @@ class CrmDeal(TimestampedModel):
             models.Index(fields=["contract_date"]),
             models.Index(fields=["assigned_by", "created_time"]),
             models.Index(fields=["assigned_by", "contract_date"]),
+            models.Index(fields=["measurer", "measure_scheduled_at"]),
+            models.Index(fields=["measurer", "contract_date"]),
             models.Index(fields=["direction", "created_time"]),
             models.Index(fields=["pipeline", "stage"]),
         ]
@@ -186,6 +197,44 @@ class DealFirstZZ(TimestampedModel):
             models.Index(fields=["first_zz_at"]),
             models.Index(fields=["assigned_by", "first_zz_at"]),
         ]
+
+
+class MeasurerDailyMetric(TimestampedModel):
+    """Дневные метрики замерщиков: замеры по дате замера, договоры по дате договора."""
+
+    metric_date = models.DateField(verbose_name="Дата")
+    measurer = models.ForeignKey(
+        CrmUser,
+        on_delete=models.CASCADE,
+        related_name="measurer_metrics",
+        verbose_name="Замерщик",
+    )
+    direction = models.ForeignKey(BusinessDirection, on_delete=models.CASCADE, verbose_name="Направление")
+    measures = models.PositiveIntegerField(default=0, verbose_name="Замеры")
+    contracts = models.PositiveIntegerField(default=0, verbose_name="Договоры")
+    contract_amount = models.DecimalField(max_digits=16, decimal_places=2, default=0, verbose_name="Сумма договоров")
+
+    class Meta:
+        db_table = "measurer_daily_metrics"
+        verbose_name = "Дневная метрика замерщика"
+        verbose_name_plural = "Дневные метрики замерщиков"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["metric_date", "measurer", "direction"],
+                name="uniq_measurer_daily_metric",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["metric_date"]),
+            models.Index(fields=["measurer", "metric_date"]),
+            models.Index(fields=["direction", "metric_date"]),
+        ]
+
+    @property
+    def conversion(self):
+        if not self.measures:
+            return 0
+        return round(float(self.contracts) * 100 / float(self.measures), 1)
 
 
 class ManagerDailyMetric(TimestampedModel):
