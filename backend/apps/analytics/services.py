@@ -182,13 +182,10 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
             stats["stage_events"] = sync_deal_stage_history(client, deal_ids=changed_deal_ids)
             stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids if mode == "incremental" else None)
 
-        if mode == "incremental":
-            metric_start = timezone.localdate() - timedelta(days=60)
-            stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
-            stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics(start_date=metric_start)
-        else:
-            stats["daily_metrics"] = rebuild_manager_daily_metrics()
-            stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics()
+        # Метрики всегда пересчитываем целиком: инкремент тянет сделки по DATE_MODIFY,
+        # в т.ч. правки «90 дней назад». Окно в N дней оставляло бы старые дни дашборда неверными.
+        stats["daily_metrics"] = rebuild_manager_daily_metrics()
+        stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics()
 
         set_sync_cursor(
             "bitrix24.modified_at",
