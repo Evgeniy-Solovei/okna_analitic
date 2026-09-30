@@ -425,7 +425,7 @@ def sync_deals(client: BitrixClient, modified_from: str | None = None) -> int:
 
 def reconcile_deleted_deals(client: BitrixClient) -> int:
     """Finds deals in local DB that were deleted in Bitrix24 and removes them using fast batching."""
-    live_bitrix_ids = set()
+    live_bitrix_ids: set[int] = set()
     start = 0
     while True:
         commands = {
@@ -457,12 +457,17 @@ def reconcile_deleted_deals(client: BitrixClient) -> int:
     if not live_bitrix_ids:
         return 0
 
-    deleted_qs = CrmDeal.objects.exclude(bitrix_id__in=live_bitrix_ids)
-    count = deleted_qs.count()
-    if count > 0:
-        logger.info(f"Reconciling deleted deals: removing {count} deals from local DB")
-        deleted_qs.delete()
-    return count
+    # Не делаем exclude(bitrix_id__in=огромный_set) — Postgres может зависнуть на минуты/часы.
+    local_ids = list(CrmDeal.objects.values_list("bitrix_id", flat=True))
+    stale_ids = [bitrix_id for bitrix_id in local_ids if bitrix_id not in live_bitrix_ids]
+    removed = 0
+    for i in range(0, len(stale_ids), 500):
+        chunk = stale_ids[i : i + 500]
+        CrmDeal.objects.filter(bitrix_id__in=chunk).delete()
+        removed += len(chunk)
+    if removed:
+        logger.info("Reconciling deleted deals: removed %s local deals", removed)
+    return removed
 
 
 
