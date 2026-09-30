@@ -149,8 +149,8 @@ def incremental_modified_from(cursor_name: str, overlap_minutes: int = 10) -> st
 
 
 def _changed_deals_metric_start(run_started_at) -> date:
-    """Нижняя граница пересчёта метрик: 90 дней + даты затронутых сделок."""
-    default_start = timezone.localdate() - timedelta(days=90)
+    """Нижняя граница пересчёта метрик: 30 дней + даты затронутых сделок."""
+    default_start = timezone.localdate() - timedelta(days=30)
     earliest = default_start
     qs = CrmDeal.objects.filter(updated_at__gte=run_started_at).only(
         "created_time", "contract_date", "measure_scheduled_at"
@@ -165,16 +165,6 @@ def _changed_deals_metric_start(run_started_at) -> date:
     return earliest
 
 
-def _should_run_reconcile(mode: str) -> bool:
-    if mode == "full":
-        return True
-    last_value = get_sync_cursor("bitrix24.last_reconcile_at")
-    last_at = parse_bitrix_datetime(last_value) if last_value else None
-    if not last_at:
-        return True
-    return timezone.now() - last_at >= timedelta(hours=24)
-
-
 def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, source: str = "bitrix24") -> dict[str, Any]:
     if mode not in {"full", "incremental"}:
         raise ValueError("mode must be 'full' or 'incremental'")
@@ -187,6 +177,10 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
     run = SyncRun.objects.create(source=source)
     stats: dict[str, Any] = {}
     try:
+        # Фон может работать долго; веб при этом ограничен statement_timeout middleware.
+        with connection.cursor() as cursor:
+            cursor.execute("SET statement_timeout TO '600000'")
+
         client = BitrixClient.from_settings()
         stats["users"] = sync_users(client)
         stats.update(sync_pipelines_and_stages(client))
@@ -199,13 +193,13 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
         stats["leads"] = sync_leads(client, modified_from=modified_from)
         stats["deals"] = sync_deals(client, modified_from=modified_from)
 
-        # Полный обход всех ID сделок в Bitrix тяжёлый — не чаще раза в сутки (и всегда на --full).
-        if _should_run_reconcile(mode):
+        # Reconcile удалений — только full. На инкременте кладёт Postgres и веб.
+        if mode == "full":
             stats["reconciled_deleted_deals"] = reconcile_deleted_deals(client)
             set_sync_cursor("bitrix24.last_reconcile_at", bitrix_datetime(run_started_at))
         else:
             stats["reconciled_deleted_deals"] = 0
-            stats["reconcile_skipped"] = "recent"
+            stats["reconcile_skipped"] = "incremental"
 
         changed_deal_ids = None
         if mode == "incremental":
@@ -214,23 +208,30 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
             )
             stats["changed_deals_for_history"] = len(changed_deal_ids)
 
-        if not skip_history:
-            # История стадий по Bitrix дорогая: на инкременте ограничиваем объём.
-            history_ids = changed_deal_ids
-            if mode == "incremental" and changed_deal_ids is not None and len(changed_deal_ids) > 150:
-                stats["history_skipped"] = "too_many_changed_deals"
-                history_ids = []
-            if history_ids is not None and len(history_ids) == 0 and mode == "incremental":
-                stats["stage_events"] = 0
-            else:
-                stats["stage_events"] = sync_deal_stage_history(client, deal_ids=history_ids)
-            stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids if mode == "incremental" else None)
+        # История стадий из Bitrix — только full (или явный skip_history=False на full).
+        # Инкремент: только локальный first_zz по уже скачанным событиям.
+        if mode == "full" and not skip_history:
+            stats["stage_events"] = sync_deal_stage_history(client, deal_ids=None)
+            stats["first_zz"] = rebuild_first_zz(deal_ids=None)
+        elif mode == "incremental":
+            stats["stage_events"] = 0
+            stats["history_skipped"] = "incremental"
+            stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids)
+        else:
+            stats["stage_events"] = 0
+            stats["first_zz"] = 0
 
         if mode == "incremental":
-            metric_start = _changed_deals_metric_start(run_started_at)
-            stats["metric_start"] = metric_start.isoformat()
-            stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
-            stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics(start_date=metric_start)
+            # Если сделки не менялись — метрики не трогаем (веб не конкурирует с записью).
+            if changed_deal_ids:
+                metric_start = _changed_deals_metric_start(run_started_at)
+                stats["metric_start"] = metric_start.isoformat()
+                stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
+                stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics(start_date=metric_start)
+            else:
+                stats["daily_metrics"] = 0
+                stats["measurer_daily_metrics"] = 0
+                stats["metrics_skipped"] = "no_changed_deals"
         else:
             stats["daily_metrics"] = rebuild_manager_daily_metrics()
             stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics()
@@ -248,6 +249,11 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
         run.save(update_fields=["status", "finished_at", "stats", "error", "updated_at"])
         raise
     finally:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SET statement_timeout TO DEFAULT")
+        except Exception:
+            pass
         _release_advisory_lock()
 
     run.status = SyncRun.Status.SUCCESS
