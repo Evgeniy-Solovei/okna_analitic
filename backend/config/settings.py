@@ -84,7 +84,7 @@ DATABASES = {
         "CONN_MAX_AGE": 0,
         "OPTIONS": {
             "connect_timeout": 3,
-            "options": "-c lock_timeout=2000 -c statement_timeout=5000",
+            "options": "-c lock_timeout=3000 -c statement_timeout=15000",
         },
     }
 }
@@ -132,6 +132,11 @@ LOGGING = {
             "propagate": False,
         },
         "apps.analytics": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "apps.analytics.timing": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

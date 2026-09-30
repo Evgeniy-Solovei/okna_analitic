@@ -1,31 +1,56 @@
 {$APP_DOMAIN:platform.oknapanorama.by} {
 	encode gzip
 
-	# Боты/сканеры долбят секреты и забивают gunicorn — режем до Django.
+	# Сканеры секретов — сразу рвём, до Django/gunicorn.
 	@scanners {
-		path_regexp scanner (?i)^/(\.git|\.env|\.aws|\.ssh|\.npmrc|\.htpasswd|Dockerfile|docker-compose|firebase|secrets?|credentials|terraform|serverless|service-?account|key\.json|cgi-bin|_profiler|actuator|feast|langflow|v1/graphql|api/v1/(validate|configs|build)|api/(auth|providers|datasources|usage)|exec-py|model/info)
+		path /.git/*
+		path /.env*
+		path /.aws/*
+		path /.ssh/*
+		path /.npmrc
+		path /.htpasswd
+		path /.git-credentials
+		path /.gitlab-ci.yml
+		path /.github/*
+		path /Dockerfile*
+		path /docker-compose*
+		path /firebase*
+		path /secrets*
+		path /credentials*
+		path /terraform*
+		path /serverless*
+		path /service-account*
+		path /serviceAccount*
+		path /key.json
+		path /cgi-bin*
+		path /_profiler*
+		path /actuator*
+		path /feast*
+		path /langflow*
+		path /v1/graphql
+		path /api/v1/validate*
+		path /api/v1/configs*
+		path /api/v1/build*
+		path /api/auth*
+		path /api/providers*
+		path /api/datasources*
+		path /api/usage*
+		path /exec-py
+		path /model/info
+		path /_security*
 	}
-	respond @scanners 404
+	abort @scanners
 
 	redir /admin /admin/ 308
 
-	handle /health/* {
-		reverse_proxy django:8000
-	}
-
-	handle /refresh* {
-		reverse_proxy django:8000
-	}
-
-	handle /accounts/* {
-		reverse_proxy django:8000
-	}
-
-	handle /admin/* {
-		reverse_proxy django:8000
-	}
-
 	handle {
-		reverse_proxy django:8000
+		reverse_proxy django:8000 {
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 25s
+				read_timeout 60s
+				write_timeout 60s
+			}
+		}
 	}
 }

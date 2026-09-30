@@ -8,11 +8,12 @@
     justify-content: center;
     flex-direction: column;
     gap: 14px;
-    background: rgba(243, 246, 251, 0.72);
+    background: rgba(243, 246, 251, 0.92);
     backdrop-filter: blur(2px);
   }
-  body[data-theme="dark"] .page-loader { background: rgba(7, 17, 28, 0.78); }
-  body.is-loading .page-loader { display: flex; }
+  body[data-theme="dark"] .page-loader { background: rgba(7, 17, 28, 0.92); }
+  body.is-loading .page-loader,
+  body.is-loading .page-loader[hidden] { display: flex !important; }
   .page-loader-card {
     min-width: min(320px, calc(100vw - 32px));
     padding: 22px 24px;
@@ -46,27 +47,29 @@
     if (!loader) return;
     const titleEl = document.getElementById("pageLoaderTitle");
     const textEl = document.getElementById("pageLoaderText");
-    let timer = null;
+    let slowTimer = null;
+    let navigating = false;
 
     function showLoader(title, text) {
       titleEl.textContent = title || "Загрузка";
       textEl.textContent = text || "Применяем фильтры…";
       loader.hidden = false;
       document.body.classList.add("is-loading");
-      if (timer) clearTimeout(timer);
-      // Если ответ завис — не блокируем UI навечно.
-      timer = setTimeout(function () {
-        textEl.textContent = "Сервер отвечает дольше обычного. Можно закрыть вкладку и открыть сайт заново.";
-        document.body.classList.remove("is-loading");
-        loader.hidden = true;
+      if (slowTimer) clearTimeout(slowTimer);
+      // НЕ снимаем оверлей по таймеру — иначе белый экран, пока документ ещё «ожидает».
+      slowTimer = setTimeout(function () {
+        textEl.textContent = "Сервер отвечает дольше обычного, не закрывайте вкладку…";
       }, 8000);
     }
 
-    window.addEventListener("pageshow", function () {
-      if (timer) clearTimeout(timer);
+    function hideLoader() {
+      if (slowTimer) clearTimeout(slowTimer);
+      navigating = false;
       document.body.classList.remove("is-loading");
       loader.hidden = true;
-    });
+    }
+
+    window.addEventListener("pageshow", hideLoader);
 
     document.addEventListener("click", function (event) {
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1) return;
@@ -78,6 +81,11 @@
       try {
         if (new URL(link.href, location.href).origin !== location.origin) return;
       } catch (e) { return; }
+      if (navigating) {
+        event.preventDefault();
+        return;
+      }
+      navigating = true;
       const isForce = /(?:\?|&)force=1(?:&|$)/.test(link.href);
       showLoader(
         isForce ? "Обновление данных" : "Загрузка",
@@ -88,6 +96,11 @@
     document.addEventListener("submit", function (event) {
       const form = event.target;
       if (!(form instanceof HTMLFormElement)) return;
+      if (navigating) {
+        event.preventDefault();
+        return;
+      }
+      navigating = true;
       if (form.classList.contains("logout-form")) {
         showLoader("Выход", "Завершаем сессию…");
         return;
