@@ -94,6 +94,12 @@ services:
       django:
         condition: service_started
 
+networks:
+  default:
+    driver_opts:
+      # Шлюз 192.168.5.1 пропускает MTU 1492 (PPPoE); с 1500 крупные TCP-пакеты теряются.
+      com.docker.network.driver.mtu: "1492"
+
 volumes:
   postgres_data:
   caddy_data:
