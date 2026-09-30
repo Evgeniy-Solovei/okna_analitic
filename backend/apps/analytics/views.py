@@ -1,9 +1,7 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from urllib.parse import urlencode
 
-import requests
-from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import ExtractHour
@@ -13,39 +11,9 @@ from django.utils import timezone
 
 from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric, MeasurerDailyMetric
 from .roles import can_force_sync, get_user_allowed_directions, resolve_manager_filters, user_is_admin, user_is_manager_only
-from .services import (
-    bitrix_datetime,
-    get_sync_cursor,
-    parse_bitrix_datetime,
-    run_bitrix24_sync,
-    set_sync_cursor,
-)
 
 
 logger = logging.getLogger(__name__)
-
-
-def _on_demand_sync_if_needed(force: bool = False) -> dict:
-    if not settings.ON_DEMAND_SYNC_ENABLED:
-        return {"skipped": True, "reason": "disabled"}
-
-    now = timezone.now()
-    if not get_sync_cursor("bitrix24.modified_at"):
-        return {"skipped": True, "reason": "initial_sync_required"}
-
-    last_value = get_sync_cursor("bitrix24.on_demand_last_at")
-    last_at = parse_bitrix_datetime(last_value) if last_value else None
-    min_interval = timedelta(seconds=settings.ON_DEMAND_SYNC_MIN_INTERVAL_SECONDS)
-
-    if not force and last_at and now - last_at < min_interval:
-        return {"skipped": True, "reason": "recent", "last_at": last_value}
-
-    # Advisory lock живёт внутри run_bitrix24_sync (общий с celery).
-    stats = run_bitrix24_sync(mode="incremental", source="bitrix24_on_demand")
-    if stats.get("skipped"):
-        return stats
-    set_sync_cursor("bitrix24.on_demand_last_at", bitrix_datetime(now), {"stats": stats})
-    return {"skipped": False, "stats": stats}
 
 
 def _parse_date_param(value):
@@ -800,11 +768,8 @@ def dashboard_entry(request):
             from .tasks import sync_bitrix24_incremental
             sync_bitrix24_incremental.delay()
         except Exception:
-            logger.exception("Failed to launch background sync task, running inline fallback")
-            try:
-                _on_demand_sync_if_needed(force=True)
-            except requests.RequestException:
-                sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
+            logger.exception("Failed to launch background sync task")
+            sync_error = "Не удалось запустить фоновое обновление. Показаны последние сохранённые данные."
 
     context = _dashboard_context(request)
     context["sync_error"] = sync_error
@@ -820,10 +785,8 @@ def measurers_dashboard_entry(request):
             from .tasks import sync_bitrix24_incremental
             sync_bitrix24_incremental.delay()
         except Exception:
-            try:
-                _on_demand_sync_if_needed(force=True)
-            except Exception:
-                sync_error = "Bitrix24 временно недоступен. Показаны последние сохранённые данные."
+            logger.exception("Failed to launch background sync task")
+            sync_error = "Не удалось запустить фоновое обновление. Показаны последние сохранённые данные."
 
     context = _measurers_dashboard_context(request)
     context["sync_error"] = sync_error
@@ -839,6 +802,9 @@ def refresh_status(request):
         sync_bitrix24_incremental.delay()
         return JsonResponse({"skipped": False, "status": "started", "message": "Фоновая синхронизация запущена"})
     except Exception:
-        result = _on_demand_sync_if_needed(force=request.GET.get("force") == "1")
-        return JsonResponse(result)
+        logger.exception("Failed to launch background sync via /refresh/")
+        return JsonResponse(
+            {"skipped": True, "reason": "celery_unavailable", "message": "Фон недоступен, синк в запросе не запускаем"},
+            status=503,
+        )
 

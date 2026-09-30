@@ -595,7 +595,26 @@ def rebuild_first_zz(deal_ids: list[int] | None = None) -> int:
 
 
 
-@transaction.atomic
+def _prune_stale_metric_rows(model, key_fields: tuple[str, str, str], keep_keys: set[tuple], start_date=None, end_date=None):
+    """Удаляет только устаревшие ключи. Без DELETE всей таблицы — дашборд не блокируется."""
+    qs = model.objects.all()
+    if start_date:
+        qs = qs.filter(**{f"{key_fields[0]}__gte": start_date})
+    if end_date:
+        qs = qs.filter(**{f"{key_fields[0]}__lte": end_date})
+
+    stale_ids = []
+    for row in qs.values_list("id", *key_fields).iterator(chunk_size=2000):
+        row_id, key = row[0], row[1:]
+        if key not in keep_keys:
+            stale_ids.append(row_id)
+            if len(stale_ids) >= 1000:
+                model.objects.filter(id__in=stale_ids).delete()
+                stale_ids = []
+    if stale_ids:
+        model.objects.filter(id__in=stale_ids).delete()
+
+
 def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date | None = None) -> int:
     buckets: dict[tuple[date, int, int], dict[str, Any]] = defaultdict(
         lambda: {"leads": 0, "target_leads": 0, "zz": 0, "contracts": 0, "contract_amount": Decimal("0")}
@@ -643,18 +662,6 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
     for first_zz in zz_qs:
         buckets[(first_zz.first_zz_at.date(), first_zz.assigned_by_id, first_zz.deal.direction_id)]["zz"] += 1
 
-    if not start_date and not end_date:
-        ManagerDailyMetric.objects.all().delete()
-    else:
-        # Чистим всё окно периода, иначе «пустые» дни и снятые менеджеры
-        # оставляют устаревшие строки при инкрементальном rebuild.
-        stale_qs = ManagerDailyMetric.objects.all()
-        if start_date:
-            stale_qs = stale_qs.filter(metric_date__gte=start_date)
-        if end_date:
-            stale_qs = stale_qs.filter(metric_date__lte=end_date)
-        stale_qs.delete()
-
     rows = [
         ManagerDailyMetric(
             metric_date=metric_date,
@@ -664,17 +671,26 @@ def rebuild_manager_daily_metrics(start_date: date | None = None, end_date: date
         )
         for (metric_date, manager_id, direction_id), values in buckets.items()
     ]
-    ManagerDailyMetric.objects.bulk_create(
-        rows,
-        batch_size=1000,
-        update_conflicts=True,
-        unique_fields=["metric_date", "manager_id", "direction_id"],
-        update_fields=["leads", "target_leads", "zz", "contracts", "contract_amount"],
+    # Сначала upsert (дашборд продолжает читать старые/уже обновлённые строки),
+    # потом точечно чистим хвосты — без DELETE всей таблицы в длинной транзакции.
+    if rows:
+        ManagerDailyMetric.objects.bulk_create(
+            rows,
+            batch_size=1000,
+            update_conflicts=True,
+            unique_fields=["metric_date", "manager_id", "direction_id"],
+            update_fields=["leads", "target_leads", "zz", "contracts", "contract_amount"],
+        )
+    _prune_stale_metric_rows(
+        ManagerDailyMetric,
+        ("metric_date", "manager_id", "direction_id"),
+        set(buckets.keys()),
+        start_date=start_date,
+        end_date=end_date,
     )
     return len(rows)
 
 
-@transaction.atomic
 def rebuild_measurer_daily_metrics(start_date: date | None = None, end_date: date | None = None) -> int:
     """
     Замеры — по measure_scheduled_at (поле CRM «Дата и время замера» / «… РО»).
@@ -712,16 +728,6 @@ def rebuild_measurer_daily_metrics(start_date: date | None = None, end_date: dat
         bucket["contracts"] += 1
         bucket["contract_amount"] += deal.contract_amount
 
-    if not start_date and not end_date:
-        MeasurerDailyMetric.objects.all().delete()
-    else:
-        stale_qs = MeasurerDailyMetric.objects.all()
-        if start_date:
-            stale_qs = stale_qs.filter(metric_date__gte=start_date)
-        if end_date:
-            stale_qs = stale_qs.filter(metric_date__lte=end_date)
-        stale_qs.delete()
-
     rows = [
         MeasurerDailyMetric(
             metric_date=metric_date,
@@ -731,12 +737,20 @@ def rebuild_measurer_daily_metrics(start_date: date | None = None, end_date: dat
         )
         for (metric_date, measurer_id, direction_id), values in buckets.items()
     ]
-    MeasurerDailyMetric.objects.bulk_create(
-        rows,
-        batch_size=1000,
-        update_conflicts=True,
-        unique_fields=["metric_date", "measurer_id", "direction_id"],
-        update_fields=["measures", "contracts", "contract_amount"],
+    if rows:
+        MeasurerDailyMetric.objects.bulk_create(
+            rows,
+            batch_size=1000,
+            update_conflicts=True,
+            unique_fields=["metric_date", "measurer_id", "direction_id"],
+            update_fields=["measures", "contracts", "contract_amount"],
+        )
+    _prune_stale_metric_rows(
+        MeasurerDailyMetric,
+        ("metric_date", "measurer_id", "direction_id"),
+        set(buckets.keys()),
+        start_date=start_date,
+        end_date=end_date,
     )
     return len(rows)
 
