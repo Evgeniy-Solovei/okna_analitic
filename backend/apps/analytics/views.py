@@ -519,7 +519,7 @@ def _dashboard_context(request):
         "detail_close_url": _url_with(filters, detail=None),
         "can_force_sync": can_force_sync(request.user),
         "active_section": "managers",
-        "managers_url": "/",
+        "managers_url": _section_url("/", filters, detail=None),
         "measurers_url": measurers_url,
     }
 
@@ -689,7 +689,7 @@ def _measurer_rows(qs, filters):
     )
     for row in rows:
         _enrich_measurer_row(row)
-        row["url"] = _url_with(filters, measurer=[row["measurer_id"]])
+        row["url"] = _section_url("/measurers/", filters, measurer=[row["measurer_id"]])
     return rows
 
 
@@ -707,7 +707,8 @@ def _measurer_daily_rows(qs, filters):
         measures = row.get("measures") or 0
         contracts = row.get("contracts") or 0
         row["conversion"] = round(float(contracts) * 100 / float(measures), 1) if measures else 0
-        row["url"] = _url_with(
+        row["url"] = _section_url(
+            "/measurers/",
             filters,
             date=row["metric_date"].isoformat(),
             date_from=None,

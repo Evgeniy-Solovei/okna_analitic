@@ -4,9 +4,11 @@
 
     function openItem(event, items, chart) {
       if (!items.length || !chart) return;
+      // только реальный клик пользователя — не navigation из chart lifecycle
+      if (event && event.type && event.type !== "click") return;
       const dataset = chart.data.datasets[items[0].datasetIndex];
       const row = dataset.rows[items[0].index];
-      if (row && row.url) window.location.href = row.url;
+      if (row && row.url) window.location.assign(row.url);
     }
 
     function drawLineChart(canvasId, rows, series) {
@@ -30,6 +32,7 @@
           interaction: { mode: "index", intersect: false },
           onClick: openItem,
           onHover: (event, items) => {
+            if (!event || !event.native || !event.native.target) return;
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
           elements: {
@@ -173,6 +176,7 @@
           },
           onClick: openItem,
           onHover: (event, items) => {
+            if (!event || !event.native || !event.native.target) return;
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
           plugins: {
@@ -332,6 +336,7 @@
             if (row && row.url) window.location.href = row.url;
           },
           onHover: (event, items) => {
+            if (!event || !event.native || !event.native.target) return;
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
           elements: {
