@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import ExtractHour
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from .models import BusinessDirection, CrmDeal, CrmLead, CrmUser, DealFirstZZ, ManagerDailyMetric, MeasurerDailyMetric
@@ -14,6 +14,14 @@ from .roles import can_force_sync, get_user_allowed_directions, resolve_manager_
 
 
 logger = logging.getLogger(__name__)
+
+
+def _redirect_without_force(request):
+    """force=1 только ставит задачу в celery; из URL убираем, иначе F5 снова запускает sync."""
+    params = request.GET.copy()
+    params.pop("force", None)
+    query = params.urlencode()
+    return redirect(request.path + (f"?{query}" if query else ""))
 
 
 def _parse_date_param(value):
@@ -761,35 +769,32 @@ def _measurers_dashboard_context(request):
 @login_required
 def dashboard_entry(request):
     force_sync = request.GET.get("force") == "1"
-
-    sync_error = ""
     if force_sync and can_force_sync(request.user):
         try:
             from .tasks import sync_bitrix24_incremental
             sync_bitrix24_incremental.delay()
         except Exception:
             logger.exception("Failed to launch background sync task")
-            sync_error = "Не удалось запустить фоновое обновление. Показаны последние сохранённые данные."
+        return _redirect_without_force(request)
 
     context = _dashboard_context(request)
-    context["sync_error"] = sync_error
+    context["sync_error"] = ""
     return render(request, "analytics/native_dashboard.html", context)
 
 
 @login_required
 def measurers_dashboard_entry(request):
     force_sync = request.GET.get("force") == "1"
-    sync_error = ""
     if force_sync and can_force_sync(request.user):
         try:
             from .tasks import sync_bitrix24_incremental
             sync_bitrix24_incremental.delay()
         except Exception:
             logger.exception("Failed to launch background sync task")
-            sync_error = "Не удалось запустить фоновое обновление. Показаны последние сохранённые данные."
+        return _redirect_without_force(request)
 
     context = _measurers_dashboard_context(request)
-    context["sync_error"] = sync_error
+    context["sync_error"] = ""
     return render(request, "analytics/native_dashboard_measurers.html", context)
 
 

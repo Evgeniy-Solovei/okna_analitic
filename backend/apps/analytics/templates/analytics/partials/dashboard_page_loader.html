@@ -1,0 +1,139 @@
+<style>
+  .page-loader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    background: rgba(243, 246, 251, 0.72);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+  body[data-theme="dark"] .page-loader {
+    background: rgba(7, 17, 28, 0.78);
+  }
+  body.is-loading .page-loader { display: flex; }
+  body.is-loading { cursor: progress; }
+  .page-loader-card {
+    min-width: min(320px, calc(100vw - 32px));
+    padding: 22px 24px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    box-shadow: 0 18px 40px rgba(23, 32, 51, 0.14);
+    text-align: center;
+  }
+  .page-loader-spinner {
+    width: 34px;
+    height: 34px;
+    margin: 0 auto 12px;
+    border: 3px solid var(--line);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: page-loader-spin 0.75s linear infinite;
+  }
+  .page-loader-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 750;
+    color: var(--text);
+  }
+  .page-loader-text {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  @keyframes page-loader-spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+
+<div class="page-loader" id="pageLoader" aria-live="polite" aria-busy="true" hidden>
+  <div class="page-loader-card">
+    <div class="page-loader-spinner" aria-hidden="true"></div>
+    <p class="page-loader-title" id="pageLoaderTitle">Загрузка</p>
+    <p class="page-loader-text" id="pageLoaderText">Подождите, страница обновляется…</p>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const loader = document.getElementById("pageLoader");
+    const titleEl = document.getElementById("pageLoaderTitle");
+    const textEl = document.getElementById("pageLoaderText");
+    if (!loader) return;
+
+    let active = false;
+
+    function showLoader(title, text) {
+      if (active) return;
+      active = true;
+      titleEl.textContent = title || "Загрузка";
+      textEl.textContent = text || "Подождите, страница обновляется…";
+      loader.hidden = false;
+      document.body.classList.add("is-loading");
+    }
+
+    function hideLoader() {
+      active = false;
+      loader.hidden = true;
+      document.body.classList.remove("is-loading");
+    }
+
+    window.addEventListener("pageshow", hideLoader);
+    window.addEventListener("pagehide", function () {
+      /* оставляем лоадер видимым до ухода со страницы */
+    });
+
+    function isModifiedClick(event) {
+      return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1;
+    }
+
+    function shouldIgnoreLink(link) {
+      if (!link || !link.href) return true;
+      if (link.target && link.target !== "_self") return true;
+      if (link.hasAttribute("download")) return true;
+      const href = link.getAttribute("href") || "";
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return true;
+      try {
+        const url = new URL(link.href, window.location.href);
+        if (url.origin !== window.location.origin) return true;
+      } catch (e) {
+        return true;
+      }
+      return false;
+    }
+
+    document.addEventListener("click", function (event) {
+      if (active || isModifiedClick(event)) return;
+      const link = event.target.closest("a");
+      if (!link || shouldIgnoreLink(link)) return;
+
+      const isForceSync = /(?:\?|&)force=1(?:&|$)/.test(link.href);
+      showLoader(
+        isForceSync ? "Обновление данных" : "Загрузка",
+        isForceSync
+          ? "Запускаем синхронизацию с Bitrix24. Страница откроется с текущими данными…"
+          : "Фильтры и отчёт загружаются, это может занять несколько секунд…"
+      );
+    }, true);
+
+    document.addEventListener("submit", function (event) {
+      if (active) {
+        event.preventDefault();
+        return;
+      }
+      const form = event.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (form.classList.contains("logout-form")) {
+        showLoader("Выход", "Завершаем сессию…");
+        return;
+      }
+      showLoader("Загрузка", "Применяем фильтры, подождите…");
+    }, true);
+  })();
+</script>
