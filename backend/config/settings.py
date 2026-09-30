@@ -42,7 +42,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "apps.analytics.middleware.ShortWebQueryTimeoutMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -81,11 +80,6 @@ DATABASES = {
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "change-me"),
         "HOST": os.getenv("POSTGRES_HOST", "localhost"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
-        "CONN_MAX_AGE": 0,
-        "OPTIONS": {
-            "connect_timeout": 3,
-            "options": "-c lock_timeout=3000 -c statement_timeout=15000",
-        },
     }
 }
 

@@ -21,15 +21,10 @@ echo "Starting gunicorn..."
 exec gunicorn config.wsgi:application \
   --chdir /app/backend \
   --bind 0.0.0.0:8000 \
-  --workers ${GUNICORN_WORKERS:-4} \
+  --workers ${GUNICORN_WORKERS:-3} \
   --timeout 60 \
   --graceful-timeout 15 \
-  --keep-alive 5 \
-  --max-requests 500 \
-  --max-requests-jitter 50 \
   --access-logfile - \
   --error-logfile - \
   --capture-output \
   --log-level info
-
-

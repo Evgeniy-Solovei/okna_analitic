@@ -1,6 +1,5 @@
 {
-	# HTTP/3 (QUIC) на этом хосте ломает загрузку: Django отдаёт HTML за ~50мс,
-	# а браузер висит 10+ секунд / «ожидает». В логах Caddy уже был UDP buffer warning.
+	# Без HTTP/3: браузер кэширует Alt-Svc и по 10с долбит QUIC, хотя Django уже ответил за ~50мс.
 	servers {
 		protocols h1 h2
 	}
@@ -9,46 +8,28 @@
 {$APP_DOMAIN:platform.oknapanorama.by} {
 	encode gzip
 
-	@scanners {
-		path /.git/*
-		path /.env*
-		path /.aws/*
-		path /.ssh/*
-		path /.npmrc
-		path /.htpasswd
-		path /.git-credentials
-		path /.gitlab-ci.yml
-		path /.github/*
-		path /Dockerfile*
-		path /docker-compose*
-		path /firebase*
-		path /secrets*
-		path /credentials*
-		path /terraform*
-		path /serverless*
-		path /service-account*
-		path /serviceAccount*
-		path /key.json
-		path /cgi-bin*
-		path /_profiler*
-		path /actuator*
-		path /feast*
-		path /langflow*
-		path /v1/graphql
-		path /api/v1/validate*
-		path /api/v1/configs*
-		path /api/v1/build*
-		path /api/auth*
-		path /api/providers*
-		path /api/datasources*
-		path /api/usage*
-		path /exec-py
-		path /model/info
-		path /_security*
-	}
-	abort @scanners
+	# Заставить браузер забыть старый h3 из Alt-Svc кэша.
+	header Alt-Svc "clear"
 
 	redir /admin /admin/ 308
 
-	reverse_proxy django:8000
+	handle /health/* {
+		reverse_proxy django:8000
+	}
+
+	handle /refresh* {
+		reverse_proxy django:8000
+	}
+
+	handle /accounts/* {
+		reverse_proxy django:8000
+	}
+
+	handle /admin/* {
+		reverse_proxy django:8000
+	}
+
+	handle {
+		reverse_proxy django:8000
+	}
 }
