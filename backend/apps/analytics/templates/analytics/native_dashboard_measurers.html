@@ -139,6 +139,7 @@
   </style>
 </head>
 <body>
+  {% include "analytics/partials/dashboard_page_loader.html" %}
   <header class="topbar">
     <div>
       <h1><a href="{% url 'measurers_dashboard' %}">Конверсия замерщиков</a></h1>
@@ -351,7 +352,8 @@
   <script>
     const savedTheme = localStorage.getItem("panorama-theme") || "light";
     document.body.dataset.theme = savedTheme;
-    const chartData = JSON.parse(document.getElementById("chart-data").textContent);
+    const chartDataEl = document.getElementById("chart-data");
+    const chartData = chartDataEl ? JSON.parse(chartDataEl.textContent) : {};
     const isDark = document.body.dataset.theme === "dark";
     const isMobile = window.matchMedia("(max-width: 640px)").matches;
     const colors = {
@@ -385,6 +387,10 @@
 {% include "analytics/partials/dashboard_chart_runtime.html" %}
 
     function renderCharts() {
+      if (!window.Chart) {
+        console.warn("Chart.js не загрузился с /static/ — графики пропущены");
+        return;
+      }
       drawLineChart("dailyChart", chartData.daily || [], [
         { label: "Замеры", key: "measures", color: colors.measures },
         { label: "Договоры", key: "contracts", color: colors.contracts }
