@@ -363,11 +363,14 @@
       muted: isDark ? "#9fb0c5" : "#667085"
     };
 
-    document.getElementById("themeToggle").textContent = isDark ? "Светлая тема" : "Темная тема";
-    document.getElementById("themeToggle").addEventListener("click", () => {
-      localStorage.setItem("panorama-theme", isDark ? "light" : "dark");
-      window.location.reload();
-    });
+    const themeToggle = document.getElementById("themeToggle");
+    if (themeToggle) {
+      themeToggle.textContent = isDark ? "Светлая тема" : "Темная тема";
+      themeToggle.addEventListener("click", () => {
+        localStorage.setItem("panorama-theme", isDark ? "light" : "dark");
+        window.location.reload();
+      });
+    }
 
     document.querySelectorAll(".multi-select").forEach(select => {
       select.addEventListener("toggle", () => {
@@ -378,138 +381,22 @@
       });
     });
 
-    function money(value) {
-      return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value || 0);
+{% include "analytics/partials/dashboard_chart_runtime.html" %}
+
+    function renderCharts() {
+      drawLineChart("dailyChart", chartData.daily || [], [
+        { label: "Замеры", key: "measures", color: colors.measures },
+        { label: "Договоры", key: "contracts", color: colors.contracts }
+      ]);
+      drawHorizontalBars("conversionChart", chartData.conversion || [], colors.conversion, "%", value => Number(value).toFixed(1));
+      drawHorizontalBars("amountChart", chartData.amounts || [], colors.amount, "", money);
+      drawHorizontalBars("measuresChart", chartData.measures || [], colors.measures, "", value => value);
+      drawSingleLineWithColumnBars("dailyConversionChart", chartData.daily || [], "conversion", colors.conversion, "%", value => Number(value).toFixed(1));
+      drawSingleLineWithColumnBars("dailyAmountChart", chartData.daily || [], "contract_amount", colors.amount, "", money);
+      drawSingleLineWithColumnBars("dailyMeasuresChart", chartData.daily || [], "measures", colors.measures, "", value => value);
     }
 
-    function drawDailyChart(rows) {
-      const canvas = document.getElementById("dailyChart");
-      if (!canvas || !rows.length || !window.Chart) return;
-      new Chart(canvas, {
-        type: "line",
-        data: {
-          labels: rows.map(row => row.label),
-          datasets: [
-            { label: "Замеры", data: rows.map(row => row.measures), rows, borderColor: colors.measures, backgroundColor: colors.measures, tension: 0.25, borderWidth: 3, pointRadius: isMobile ? 2 : 3 },
-            { label: "Договоры", data: rows.map(row => row.contracts), rows, borderColor: colors.contracts, backgroundColor: colors.contracts, tension: 0.25, borderWidth: 3, pointRadius: isMobile ? 2 : 3 }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: "index", intersect: false },
-          plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => rows[items[0].dataIndex]?.date || "" } } },
-          scales: {
-            x: { grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
-            y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.muted } }
-          }
-        }
-      });
-    }
-
-    function drawHorizontalBars(canvasId, rows, color, suffix = "", formatter = value => value) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas || !rows.length || !window.Chart) return;
-      const plugin = {
-        id: `barLabels_${canvasId}`,
-        afterDatasetsDraw(chart) {
-          const { ctx } = chart;
-          const dataset = chart.data.datasets[0];
-          const meta = chart.getDatasetMeta(0);
-          meta.data.forEach((bar, index) => {
-            const text = `${formatter(dataset.data[index])}${suffix}`;
-            const start = Math.min(bar.base, bar.x);
-            const end = Math.max(bar.base, bar.x);
-            const width = end - start;
-            ctx.save();
-            ctx.font = "bold 11px Inter, sans-serif";
-            ctx.textBaseline = "middle";
-            if (width >= 36) {
-              ctx.fillStyle = "#fff";
-              ctx.textAlign = "center";
-              ctx.fillText(text, start + width / 2, bar.y);
-            } else {
-              ctx.fillStyle = colors.text;
-              ctx.textAlign = "left";
-              ctx.fillText(text, end + 6, bar.y);
-            }
-            ctx.restore();
-          });
-        }
-      };
-      new Chart(canvas, {
-        type: "bar",
-        data: {
-          labels: rows.map(row => row.label),
-          datasets: [{ data: rows.map(row => row.value), rows, backgroundColor: color, borderRadius: 5, barThickness: 18 }]
-        },
-        plugins: [plugin],
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          maintainAspectRatio: false,
-          layout: { padding: { right: 72 } },
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: item => `${formatter(item.raw)}${suffix}` } }
-          },
-          scales: {
-            x: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` } },
-            y: { grid: { display: false }, ticks: { color: colors.text, autoSkip: false } }
-          }
-        }
-      });
-    }
-
-    function drawDailyMetric(canvasId, rows, valueKey, color, suffix = "", formatter = value => value) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas || !rows.length || !window.Chart) return;
-      new Chart(canvas, {
-        type: "line",
-        data: {
-          labels: rows.map(row => row.label),
-          datasets: [{
-            data: rows.map(row => row[valueKey]),
-            rows,
-            borderColor: color,
-            backgroundColor: color,
-            tension: 0.25,
-            borderWidth: 3,
-            pointRadius: isMobile ? 2 : 3
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: "index", intersect: false },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                title: items => rows[items[0].dataIndex]?.date || items[0].label,
-                label: item => `${formatter(item.raw)}${suffix}`
-              }
-            }
-          },
-          scales: {
-            x: { offset: true, grid: { display: false }, ticks: { color: colors.muted, maxTicksLimit: isMobile ? 6 : 12 } },
-            y: {
-              beginAtZero: true,
-              grid: { color: colors.grid },
-              ticks: { color: colors.muted, callback: value => `${formatter(value)}${suffix}` }
-            }
-          }
-        }
-      });
-    }
-
-    drawDailyChart(chartData.daily || []);
-    drawHorizontalBars("conversionChart", chartData.conversion || [], colors.conversion, "%", value => Number(value).toFixed(1));
-    drawHorizontalBars("amountChart", chartData.amounts || [], colors.amount, "", money);
-    drawHorizontalBars("measuresChart", chartData.measures || [], colors.measures, "", value => value);
-    drawDailyMetric("dailyConversionChart", chartData.daily || [], "conversion", colors.conversion, "%", value => Number(value).toFixed(1));
-    drawDailyMetric("dailyAmountChart", chartData.daily || [], "contract_amount", colors.amount, "", money);
-    drawDailyMetric("dailyMeasuresChart", chartData.daily || [], "measures", colors.measures, "", value => value);
+    renderCharts();
   </script>
 </body>
 </html>
