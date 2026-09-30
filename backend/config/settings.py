@@ -142,14 +142,12 @@ LOGGING = {
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = TIME_ZONE
-# Авто-sync временно выключен: фоновые тяжёлые задачи блокировали чтение БД и вешали дашборд.
-# Обновление только кнопкой «Обновить данные» (celery task вручную).
-# Вернуть расписание после стабилизации, например:
-# "bitrix24-incremental-sync-every-10-minutes": {
-#     "task": "apps.analytics.tasks.sync_bitrix24_incremental",
-#     "schedule": 10 * 60,
-# },
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    "bitrix24-incremental-sync-every-10-minutes": {
+        "task": "apps.analytics.tasks.sync_bitrix24_incremental",
+        "schedule": 10 * 60,
+    },
+}
 
 BITRIX24 = {
     "BASE_URL": os.getenv("BITRIX24_BASE_URL", "").rstrip("/"),
