@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Эффективность менеджеров</title>
+  {% load static %}
   <style>
     :root {
       --bg: #f3f6fb;
@@ -822,7 +823,6 @@
   </style>
 </head>
 <body>
-  {% include "analytics/partials/dashboard_page_loader.html" %}
   <header class="topbar">
     <div>
       <h1><a href="https://platform.oknapanorama.by/">Эффективность менеджеров</a></h1>
@@ -1137,7 +1137,7 @@
       </section>
     {% endif %}
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="{% static 'analytics/js/chart.umd.min.js' %}"></script>
   {{ chart_data|json_script:"chart-data" }}
   <script>
     const savedTheme = localStorage.getItem("panorama-theme") || "light";
