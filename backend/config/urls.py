@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
+from django.views.generic import RedirectView
 
 from apps.analytics.views import dashboard_entry, measurers_dashboard_entry, refresh_status
 
@@ -16,4 +17,9 @@ urlpatterns = [
     path("refresh/", refresh_status),
     path("admin/", admin.site.urls),
     path("health/", health),
+    path(
+        "favicon.ico",
+        RedirectView.as_view(url="/static/analytics/favicon.ico", permanent=False),
+        name="favicon",
+    ),
 ]

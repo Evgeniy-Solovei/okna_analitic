@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Эффективность менеджеров</title>
   {% load static %}
+  <link rel="icon" href="{% static 'analytics/favicon.ico' %}" sizes="any">
+  <link rel="icon" href="{% static 'analytics/favicon.svg' %}" type="image/svg+xml">
   <style>
     :root {
       --bg: #f3f6fb;
@@ -864,8 +866,8 @@
       </div>
       {% if not is_manager_only %}
       <div>
-        <label for="manager">Менеджер</label>
-        <details class="multi-select" id="manager">
+        <label id="manager-label">Менеджер</label>
+        <details class="multi-select" id="manager" aria-labelledby="manager-label">
           <summary>{{ selected_manager_title }}</summary>
           <div class="multi-menu">
             <div class="multi-options">
@@ -884,8 +886,8 @@
         </details>
       </div>
       <div>
-        <label for="exclude_manager">Исключить</label>
-        <details class="multi-select" id="exclude_manager">
+        <label id="exclude-manager-label">Исключить</label>
+        <details class="multi-select" id="exclude_manager" aria-labelledby="exclude-manager-label">
           <summary>{{ excluded_manager_title }}</summary>
           <div class="multi-menu">
             <div class="multi-options">
@@ -905,9 +907,9 @@
       </div>
       {% endif %}
       <div>
-        <label for="direction">Направление</label>
+        <label id="direction-label">Направление</label>
         {% if directions|length > 1 %}
-        <details class="multi-select" id="direction">
+        <details class="multi-select" id="direction" aria-labelledby="direction-label">
           <summary>{{ selected_direction_title }}</summary>
           <div class="multi-menu">
             <div class="multi-options">
@@ -924,7 +926,7 @@
           </div>
         </details>
         {% else %}
-        <input type="text" value="{{ selected_direction_title }}" readonly style="background: var(--soft); font-weight: 600; cursor: not-allowed;">
+        <input id="direction-readonly" type="text" value="{{ selected_direction_title }}" readonly aria-labelledby="direction-label" style="background: var(--soft); font-weight: 600; cursor: not-allowed;">
         {% endif %}
       </div>
       <div class="filter-actions">
