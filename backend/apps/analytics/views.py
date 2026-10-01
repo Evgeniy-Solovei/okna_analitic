@@ -383,9 +383,16 @@ def _dashboard_context(request):
     selected_direction_title = _selection_title(selected_directions, "Направление не настроено")
 
     if filters["selected_date"]:
-        daily_rows = _hourly_rows_for_selected_date(filters)
+        chart_day = filters["selected_date"]
+        daily_rows = _hourly_rows_for_selected_date({**filters, "selected_date": chart_day})
+        chart_granularity = "hour"
+    elif filters["date_from"] and filters["date_to"] and filters["date_from"] == filters["date_to"]:
+        chart_day = filters["date_from"]
+        daily_rows = _hourly_rows_for_selected_date({**filters, "selected_date": chart_day})
+        chart_granularity = "hour"
     else:
         daily_rows = _daily_rows(qs, filters)
+        chart_granularity = "day"
 
     detail = filters["detail"]
     details_enabled = bool(detail)
@@ -416,10 +423,15 @@ def _dashboard_context(request):
     }.get(detail, "Детализация")
 
     chart_data = {
+        "granularity": chart_granularity,
         "daily": [
             {
                 "label": row.get("label") or row["metric_date"].strftime("%d.%m"),
-                "date": row["metric_date"].isoformat() if hasattr(row["metric_date"], "isoformat") else str(row["metric_date"]),
+                "date": (
+                    f"{row['metric_date'].strftime('%d.%m.%Y')} {row['label']}"
+                    if chart_granularity == "hour" and row.get("label")
+                    else (row["metric_date"].isoformat() if hasattr(row["metric_date"], "isoformat") else str(row["metric_date"]))
+                ),
                 "target_leads": int(row["target_leads"] or 0),
                 "zz": int(row["zz"] or 0),
                 "contracts": int(row["contracts"] or 0),
@@ -495,6 +507,7 @@ def _dashboard_context(request):
         "active_section": "managers",
         "managers_url": _section_url("/", filters, detail=None),
         "measurers_url": measurers_url,
+        "chart_granularity": chart_granularity,
     }
 
 
@@ -553,11 +566,23 @@ def _hourly_rows_for_selected_date(filters):
         .annotate(total=Sum("contract_amount"))
     }
 
+    active_hours = [
+        hour
+        for hour in range(24)
+        if target_by_hour.get(hour) or zz_by_hour.get(hour) or contracts_by_hour.get(hour) or amount_by_hour.get(hour)
+    ]
+    # Окно рабочего дня; расширяем, если активность раньше/позже.
+    start_hour, end_hour = 8, 21
+    if active_hours:
+        start_hour = min(start_hour, min(active_hours))
+        end_hour = max(end_hour, max(active_hours))
+
     rows = []
-    for hour in range(24):
+    for hour in range(start_hour, end_hour + 1):
         row = {
             "metric_date": selected_date,
             "label": f"{hour:02d}:00",
+            "hour": hour,
             "target_leads": target_by_hour.get(hour, 0),
             "zz": zz_by_hour.get(hour, 0),
             "contracts": contracts_by_hour.get(hour, 0),

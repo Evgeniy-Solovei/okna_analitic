@@ -14,6 +14,7 @@
     function drawLineChart(canvasId, rows, series) {
       const canvas = document.getElementById(canvasId);
       if (!canvas || !rows.length || !window.Chart || !series.length) return;
+      const isHourly = (chartData.granularity || "day") === "hour";
       new Chart(canvas, {
         type: "line",
         data: {
@@ -23,7 +24,10 @@
             data: rows.map(row => row[item.key]),
             rows,
             borderColor: item.color,
-            backgroundColor: item.color
+            backgroundColor: isHourly ? `${item.color}22` : item.color,
+            fill: isHourly,
+            pointRadius: isHourly ? (isMobile ? 2 : 3) : (isMobile ? 2 : 3),
+            pointHoverRadius: 6
           }))
         },
         options: {
@@ -36,7 +40,7 @@
             event.native.target.style.cursor = items.length ? "pointer" : "default";
           },
           elements: {
-            line: { tension: 0.25, borderWidth: 3 },
+            line: { tension: isHourly ? 0.35 : 0.25, borderWidth: 3 },
             point: { radius: isMobile ? 2 : 3, hoverRadius: 6 }
           },
           plugins: {
@@ -55,7 +59,8 @@
               grid: { display: false },
               ticks: {
                 color: colors.muted,
-                maxTicksLimit: isMobile ? 6 : 12
+                maxTicksLimit: isHourly ? (isMobile ? 8 : 14) : (isMobile ? 6 : 12),
+                autoSkip: true
               }
             },
             y: {

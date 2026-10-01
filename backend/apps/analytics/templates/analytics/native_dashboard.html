@@ -347,6 +347,13 @@
       font-weight: 800;
     }
 
+    .metric-hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -938,19 +945,20 @@
     <section class="kpis" aria-label="Показатели">
       <a class="kpi card {% if filters.detail == 'leads' %}active{% endif %}" href="{{ kpi_urls.leads }}"><div class="kpi-label">Лиды</div><div class="kpi-value">{{ totals.leads }}</div></a>
       <a class="kpi card {% if filters.detail == 'target_leads' %}active{% endif %}" href="{{ kpi_urls.target_leads }}"><div class="kpi-label">ЦЛ</div><div class="kpi-value">{{ totals.target_leads }}</div></a>
-      <a class="kpi card {% if filters.detail == 'zz' %}active{% endif %}" href="{{ kpi_urls.zz }}"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></a>
+      <a class="kpi card {% if filters.detail == 'zz' %}active{% endif %}" href="{{ kpi_urls.zz }}" title="Первое попадание сделки в стадию ЗЗ за период — не «сколько сейчас в колонке Bitrix»"><div class="kpi-label">ЗЗ</div><div class="kpi-value">{{ totals.zz }}</div></a>
       <a class="kpi card {% if filters.detail == 'conversion' %}active{% endif %}" href="{{ kpi_urls.conversion }}"><div class="kpi-label">Конверсия</div><div class="kpi-value">{{ totals.conversion }}%</div></a>
       <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.contracts }}"><div class="kpi-label">Договоры</div><div class="kpi-value">{{ totals.contracts }}</div></a>
       <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.avg_check }}"><div class="kpi-label">Средний чек</div><div class="kpi-value">{{ totals.avg_check }}</div></a>
       <a class="kpi card {% if filters.detail == 'contracts' %}active{% endif %}" href="{{ kpi_urls.contract_amount }}"><div class="kpi-label">Сумма договоров</div><div class="kpi-value">{{ totals.contract_amount }}</div></a>
     </section>
+    <p class="metric-hint">ЗЗ — первое попадание сделки в стадию ЗЗ за выбранный период. Это не «сколько сделок сейчас стоит в колонке ЗЗ» в Bitrix.</p>
 
     <section class="grid">
       <article class="card wide">
-        <h2>Динамика ЦЛ, ЗЗ и договоров по дням</h2>
+        <h2>{% if chart_granularity == 'hour' %}Динамика ЦЛ, ЗЗ и договоров по часам{% else %}Динамика ЦЛ, ЗЗ и договоров по дням{% endif %}</h2>
         {% if daily_rows %}
           <div class="chart-box">
-            <canvas id="dailyChart" aria-label="Динамика по дням"></canvas>
+            <canvas id="dailyChart" aria-label="{% if chart_granularity == 'hour' %}Динамика по часам{% else %}Динамика по дням{% endif %}"></canvas>
           </div>
           <div class="legend">
             <span><span class="dot target"></span>ЦЛ</span>
@@ -998,10 +1006,10 @@
 
     <section class="grid">
       <article class="card wide">
-        <h2>Конверсия по дням</h2>
+        <h2>{% if chart_granularity == 'hour' %}Конверсия по часам{% else %}Конверсия по дням{% endif %}</h2>
         {% if daily_rows %}
           <div class="chart-box">
-            <canvas id="dailyConversionChart" aria-label="Конверсия по дням"></canvas>
+            <canvas id="dailyConversionChart" aria-label="{% if chart_granularity == 'hour' %}Конверсия по часам{% else %}Конверсия по дням{% endif %}"></canvas>
           </div>
         {% else %}
           <div class="empty">Нет данных за выбранный период.</div>
@@ -1009,10 +1017,10 @@
       </article>
 
       <article class="card wide">
-        <h2>Сумма договоров по дням</h2>
+        <h2>{% if chart_granularity == 'hour' %}Сумма договоров по часам{% else %}Сумма договоров по дням{% endif %}</h2>
         {% if daily_rows %}
           <div class="chart-box">
-            <canvas id="dailyAmountChart" aria-label="Сумма договоров по дням"></canvas>
+            <canvas id="dailyAmountChart" aria-label="{% if chart_granularity == 'hour' %}Сумма договоров по часам{% else %}Сумма договоров по дням{% endif %}"></canvas>
           </div>
         {% else %}
           <div class="empty">Нет данных за выбранный период.</div>
@@ -1107,6 +1115,7 @@
         {% if show_details.zz %}
         <article class="card table-card wide">
           <h2>ЗЗ</h2>
+          <p class="metric-hint">Учитывается дата первого попадания в стадию ЗЗ, а не текущая колонка в Bitrix.</p>
           <div class="scroll-hint">Таблицу можно прокрутить по горизонтали</div>
           <table>
             <thead><tr><th>ID сделки</th><th>Дата ЗЗ</th><th>Название</th><th>Менеджер</th></tr></thead>

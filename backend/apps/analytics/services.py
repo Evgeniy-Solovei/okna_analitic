@@ -208,15 +208,19 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
             )
             stats["changed_deals_for_history"] = len(changed_deal_ids)
 
-        # История стадий из Bitrix — только full (или явный skip_history=False на full).
-        # Инкремент: только локальный first_zz по уже скачанным событиям.
+        # Full: вся история стадий. Incremental: только по сделкам, обновлённым в этом прогоне —
+        # иначе ЗЗ не двигается (first_zz строится из stage events, а инкремент их раньше пропускал).
         if mode == "full" and not skip_history:
             stats["stage_events"] = sync_deal_stage_history(client, deal_ids=None)
             stats["first_zz"] = rebuild_first_zz(deal_ids=None)
         elif mode == "incremental":
-            stats["stage_events"] = 0
-            stats["history_skipped"] = "incremental"
-            stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids)
+            if changed_deal_ids:
+                stats["stage_events"] = sync_deal_stage_history(client, deal_ids=changed_deal_ids)
+                stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids)
+            else:
+                stats["stage_events"] = 0
+                stats["first_zz"] = 0
+                stats["history_skipped"] = "no_changed_deals"
         else:
             stats["stage_events"] = 0
             stats["first_zz"] = 0
