@@ -177,7 +177,7 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
     run = SyncRun.objects.create(source=source)
     stats: dict[str, Any] = {}
     try:
-        # Фон может работать долго; веб при этом ограничен statement_timeout middleware.
+        # Celery sync может идти долго (Bitrix API + метрики).
         with connection.cursor() as cursor:
             cursor.execute("SET statement_timeout TO '600000'")
 

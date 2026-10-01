@@ -1,5 +1,4 @@
 import logging
-import time
 from datetime import datetime
 from urllib.parse import urlencode
 
@@ -365,12 +364,8 @@ def _build_detail_filters(filters):
 
 
 def _dashboard_context(request):
-    t0 = time.monotonic()
-    request_id = getattr(request, "analytics_request_id", "-")
     qs, filters = _metric_queryset(request)
-    t_qs = time.monotonic()
     totals = _sum_metrics(qs)
-    t_totals = time.monotonic()
     manager_rows = _manager_rows(qs, filters)
 
     conversion_rows = sorted(manager_rows, key=lambda item: item["conversion"], reverse=True)
@@ -379,7 +374,6 @@ def _dashboard_context(request):
     target_rows = _bar_rows(target_rows, "target_leads")
     amount_rows = _bar_rows(manager_rows.copy(), "contract_amount")
     direction_table_rows = _direction_table_rows(qs, filters, user=request.user)
-    t_tables = time.monotonic()
 
     selected_managers = list(CrmUser.objects.filter(id__in=filters["manager_ids"]).order_by("name"))
     excluded_managers = list(CrmUser.objects.filter(id__in=filters.get("exclude_manager_ids", [])).order_by("name"))
@@ -392,7 +386,6 @@ def _dashboard_context(request):
         daily_rows = _hourly_rows_for_selected_date(filters)
     else:
         daily_rows = _daily_rows(qs, filters)
-    t_daily = time.monotonic()
 
     detail = filters["detail"]
     details_enabled = bool(detail)
@@ -400,12 +393,11 @@ def _dashboard_context(request):
     if details_enabled:
         lead_f, deal_f, contract_f, zz_f = _build_detail_filters(filters)
         details = {
-            "leads": list(CrmLead.objects.select_related("assigned_by", "direction").filter(lead_f).order_by("-created_time")[:100]),
-            "deals": list(CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(deal_f).order_by("-created_time")[:100]),
-            "zz": list(DealFirstZZ.objects.select_related("deal", "assigned_by", "stage", "deal__assigned_by", "deal__direction").filter(zz_f).order_by("-first_zz_at")[:100]),
-            "contracts": list(CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(contract_f, contract_date__isnull=False).order_by("-contract_date")[:100]),
+            "leads": CrmLead.objects.select_related("assigned_by", "direction").filter(lead_f).order_by("-created_time")[:100],
+            "deals": CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(deal_f).order_by("-created_time")[:100],
+            "zz": DealFirstZZ.objects.select_related("deal", "assigned_by", "stage", "deal__assigned_by", "deal__direction").filter(zz_f).order_by("-first_zz_at")[:100],
+            "contracts": CrmDeal.objects.select_related("assigned_by", "direction", "stage").filter(contract_f, contract_date__isnull=False).order_by("-contract_date")[:100],
         }
-    t_details = time.monotonic()
 
     show_details = {
         "leads": detail in {"leads"},
@@ -470,31 +462,13 @@ def _dashboard_context(request):
         manager=None,
         exclude_manager=None,
     )
-    managers = list(
-        CrmUser.objects.filter(
-            id__in=ManagerDailyMetric.objects.values_list("manager_id", flat=True).distinct()
-        ).order_by("name")
-    )
-    directions = list(get_user_allowed_directions(request.user).order_by("name"))
-    t_end = time.monotonic()
-    logger.info(
-        "CONTEXT id=%s qs=%.0f totals=%.0f tables=%.0f daily=%.0f details=%.0f misc=%.0f total=%.0f direction=%s",
-        request_id,
-        (t_qs - t0) * 1000,
-        (t_totals - t_qs) * 1000,
-        (t_tables - t_totals) * 1000,
-        (t_daily - t_tables) * 1000,
-        (t_details - t_daily) * 1000,
-        (t_end - t_details) * 1000,
-        (t_end - t0) * 1000,
-        filters.get("direction_ids"),
-    )
     return {
         "totals": totals,
         "filters": filters,
-        "managers": managers,
-        "directions": directions,
-
+        "managers": CrmUser.objects.filter(
+            id__in=ManagerDailyMetric.objects.values_list("manager_id", flat=True).distinct()
+        ).order_by("name"),
+        "directions": get_user_allowed_directions(request.user).order_by("name"),
         "selected_managers": selected_managers,
         "excluded_managers": excluded_managers,
         "selected_directions": selected_directions,
@@ -802,23 +776,9 @@ def dashboard_entry(request):
             logger.exception("Failed to launch background sync task")
         return _redirect_without_force(request)
 
-    t0 = time.monotonic()
-    request_id = getattr(request, "analytics_request_id", "-")
     context = _dashboard_context(request)
-    context_ms = (time.monotonic() - t0) * 1000
     context["sync_error"] = ""
-    t1 = time.monotonic()
-    response = render(request, "analytics/native_dashboard.html", context)
-    render_ms = (time.monotonic() - t1) * 1000
-    logger.info(
-        "DASHBOARD id=%s context_ms=%.0f render_ms=%.0f direction=%s detail=%s",
-        request_id,
-        context_ms,
-        render_ms,
-        context.get("filters", {}).get("direction_ids"),
-        context.get("filters", {}).get("detail") or "-",
-    )
-    return response
+    return render(request, "analytics/native_dashboard.html", context)
 
 
 @login_required
@@ -832,22 +792,9 @@ def measurers_dashboard_entry(request):
             logger.exception("Failed to launch background sync task")
         return _redirect_without_force(request)
 
-    t0 = time.monotonic()
-    request_id = getattr(request, "analytics_request_id", "-")
     context = _measurers_dashboard_context(request)
-    context_ms = (time.monotonic() - t0) * 1000
     context["sync_error"] = ""
-    t1 = time.monotonic()
-    response = render(request, "analytics/native_dashboard_measurers.html", context)
-    render_ms = (time.monotonic() - t1) * 1000
-    logger.info(
-        "MEASURERS id=%s context_ms=%.0f render_ms=%.0f direction=%s",
-        request_id,
-        context_ms,
-        render_ms,
-        context.get("filters", {}).get("direction_ids"),
-    )
-    return response
+    return render(request, "analytics/native_dashboard_measurers.html", context)
 
 
 @login_required

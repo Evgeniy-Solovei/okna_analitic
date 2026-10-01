@@ -22,8 +22,7 @@ exec gunicorn config.wsgi:application \
   --chdir /app/backend \
   --bind 0.0.0.0:8000 \
   --workers ${GUNICORN_WORKERS:-3} \
-  --timeout 60 \
-  --graceful-timeout 15 \
+  --timeout 120 \
   --access-logfile - \
   --error-logfile - \
   --capture-output \

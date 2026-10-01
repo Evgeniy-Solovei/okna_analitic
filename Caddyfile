@@ -1,15 +1,5 @@
-{
-	# Без HTTP/3: браузер кэширует Alt-Svc и по 10с долбит QUIC, хотя Django уже ответил за ~50мс.
-	servers {
-		protocols h1 h2
-	}
-}
-
 {$APP_DOMAIN:platform.oknapanorama.by} {
 	encode gzip
-
-	# Заставить браузер забыть старый h3 из Alt-Svc кэша.
-	header Alt-Svc "clear"
 
 	redir /admin /admin/ 308
 

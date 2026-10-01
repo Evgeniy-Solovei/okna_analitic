@@ -130,11 +130,6 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "apps.analytics.timing": {
-            "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
-        },
     },
 }
 
