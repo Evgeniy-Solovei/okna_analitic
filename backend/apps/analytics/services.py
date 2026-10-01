@@ -138,7 +138,9 @@ def set_sync_cursor(name: str, value: str, payload: dict[str, Any] | None = None
     )
 
 
-def incremental_modified_from(cursor_name: str, overlap_minutes: int = 10) -> str | None:
+def incremental_modified_from(cursor_name: str, overlap_minutes: int | None = None) -> str | None:
+    if overlap_minutes is None:
+        overlap_minutes = int(getattr(settings, "BITRIX24_SYNC", {}).get("OVERLAP_MINUTES", 15))
     value = get_sync_cursor(cursor_name)
     if not value:
         return None
@@ -149,23 +151,84 @@ def incremental_modified_from(cursor_name: str, overlap_minutes: int = 10) -> st
 
 
 def _changed_deals_metric_start(run_started_at) -> date:
-    """Нижняя граница пересчёта метрик: 30 дней + даты затронутых сделок."""
+    """Нижняя граница пересчёта метрик: 30 дней + даты затронутых сделок/лидов."""
     default_start = timezone.localdate() - timedelta(days=30)
     earliest = default_start
-    qs = CrmDeal.objects.filter(updated_at__gte=run_started_at).only(
+    deal_qs = CrmDeal.objects.filter(updated_at__gte=run_started_at).only(
         "created_time", "contract_date", "measure_scheduled_at"
     )
-    for deal in qs.iterator(chunk_size=500):
+    for deal in deal_qs.iterator(chunk_size=500):
         if deal.created_time:
             earliest = min(earliest, timezone.localtime(deal.created_time).date())
         if deal.contract_date:
             earliest = min(earliest, deal.contract_date)
         if deal.measure_scheduled_at:
             earliest = min(earliest, timezone.localtime(deal.measure_scheduled_at).date())
+
+    lead_qs = CrmLead.objects.filter(updated_at__gte=run_started_at).only("created_time")
+    for lead in lead_qs.iterator(chunk_size=500):
+        if lead.created_time:
+            earliest = min(earliest, timezone.localtime(lead.created_time).date())
     return earliest
 
 
-def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, source: str = "bitrix24") -> dict[str, Any]:
+def _sync_cfg(key: str, default):
+    return getattr(settings, "BITRIX24_SYNC", {}).get(key, default)
+
+
+def _should_run_periodic(cursor_name: str, hours: float, *, force: bool = False) -> bool:
+    if force:
+        return True
+    last_value = get_sync_cursor(cursor_name)
+    last_at = parse_bitrix_datetime(last_value) if last_value else None
+    if not last_at:
+        return True
+    return timezone.now() - last_at >= timedelta(hours=hours)
+
+
+def _history_backlog_get() -> list[int]:
+    cursor = SyncCursor.objects.filter(name="bitrix24.history_backlog").first()
+    if not cursor or not isinstance(cursor.payload, dict):
+        return []
+    raw_ids = cursor.payload.get("deal_ids") or []
+    return [int(item) for item in raw_ids if str(item).isdigit() or isinstance(item, int)]
+
+
+def _history_backlog_set(deal_ids: list[int]) -> None:
+    # Храним уникальные ID, без гигантских хвостов.
+    unique_ids = sorted(set(int(item) for item in deal_ids))[:5000]
+    SyncCursor.objects.update_or_create(
+        name="bitrix24.history_backlog",
+        defaults={
+            "value": str(len(unique_ids)),
+            "payload": {"deal_ids": unique_ids},
+        },
+    )
+
+
+def _plan_history_deal_ids(changed_deal_ids: list[int]) -> tuple[list[int], int]:
+    """Не пропускаем историю: очередь + лимит на один прогон."""
+    batch_size = int(_sync_cfg("HISTORY_BATCH_SIZE", 200))
+    pending = _history_backlog_get()
+    merged: list[int] = []
+    seen: set[int] = set()
+    for deal_id in pending + list(changed_deal_ids):
+        if deal_id in seen:
+            continue
+        seen.add(deal_id)
+        merged.append(deal_id)
+    to_process = merged[:batch_size]
+    remaining = merged[batch_size:]
+    _history_backlog_set(remaining)
+    return to_process, len(remaining)
+
+
+def run_bitrix24_sync(
+    mode: str = "incremental",
+    skip_history: bool = False,
+    source: str = "bitrix24",
+    force_reconcile: bool = False,
+) -> dict[str, Any]:
     if mode not in {"full", "incremental"}:
         raise ValueError("mode must be 'full' or 'incremental'")
 
@@ -176,47 +239,93 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
     run_started_at = timezone.now()
     run = SyncRun.objects.create(source=source)
     stats: dict[str, Any] = {}
+    need_metrics = mode == "full"
     try:
         # Celery sync может идти долго (Bitrix API + метрики).
         with connection.cursor() as cursor:
             cursor.execute("SET statement_timeout TO '600000'")
 
         client = BitrixClient.from_settings()
-        stats["users"] = sync_users(client)
-        stats.update(sync_pipelines_and_stages(client))
+        # force_reconcile = кнопка «Обновить»: универсальная проверка (изменения + удаления + мета).
+        meta_hours = float(_sync_cfg("META_SYNC_HOURS", 6))
+        run_meta = (
+            mode == "full"
+            or force_reconcile
+            or _should_run_periodic("bitrix24.last_meta_sync_at", meta_hours)
+        )
+        if run_meta:
+            stats["users"] = sync_users(client)
+            stats.update(sync_pipelines_and_stages(client))
+            set_sync_cursor("bitrix24.last_meta_sync_at", bitrix_datetime(run_started_at))
+        else:
+            stats["users"] = 0
+            stats["pipelines"] = 0
+            stats["stages"] = 0
+            stats["meta_skipped"] = "recent"
 
-        modified_from = incremental_modified_from("bitrix24.modified_at") if mode == "incremental" else None
+        # Быстрый канал: только записи с DATE_MODIFY >= курсора.
+        # Фон — overlap ~15 мин; кнопка «Обновить» — шире (сутки), без полного dump всех 100k.
+        if mode == "incremental":
+            overlap_minutes = int(_sync_cfg("OVERLAP_MINUTES", 15))
+            if force_reconcile:
+                overlap_minutes = int(float(_sync_cfg("FORCE_OVERLAP_HOURS", 24)) * 60)
+            modified_from = incremental_modified_from("bitrix24.modified_at", overlap_minutes=overlap_minutes)
+        else:
+            modified_from = None
         stats["mode"] = mode
         stats["modified_from"] = modified_from
         stats["previous_cursor"] = get_sync_cursor("bitrix24.modified_at")
+        stats["force_reconcile"] = force_reconcile
 
         stats["leads"] = sync_leads(client, modified_from=modified_from)
         stats["deals"] = sync_deals(client, modified_from=modified_from)
 
-        # Reconcile удалений — только full. На инкременте кладёт Postgres и веб.
-        if mode == "full":
+        # Удаления Bitrix не отдаёт через DATE_MODIFY.
+        # Фон — раз в 6 ч; кнопка «Обновить» — всегда сразу.
+        reconcile_hours = float(_sync_cfg("RECONCILE_HOURS", 6))
+        run_reconcile = (
+            mode == "full"
+            or force_reconcile
+            or _should_run_periodic("bitrix24.last_reconcile_at", reconcile_hours)
+        )
+        if run_reconcile:
             stats["reconciled_deleted_deals"] = reconcile_deleted_deals(client)
+            stats["reconciled_deleted_leads"] = reconcile_deleted_leads(client)
             set_sync_cursor("bitrix24.last_reconcile_at", bitrix_datetime(run_started_at))
         else:
             stats["reconciled_deleted_deals"] = 0
-            stats["reconcile_skipped"] = "incremental"
+            stats["reconciled_deleted_leads"] = 0
+            stats["reconcile_skipped"] = "recent"
 
-        changed_deal_ids = None
+        if stats["reconciled_deleted_deals"] or stats["reconciled_deleted_leads"]:
+            need_metrics = True
+
+        changed_deal_ids: list[int] = []
+        leads_changed = False
         if mode == "incremental":
             changed_deal_ids = list(
                 CrmDeal.objects.filter(updated_at__gte=run_started_at).values_list("bitrix_id", flat=True)
             )
+            leads_changed = CrmLead.objects.filter(updated_at__gte=run_started_at).exists()
             stats["changed_deals_for_history"] = len(changed_deal_ids)
+            stats["leads_changed"] = leads_changed
+            if changed_deal_ids or leads_changed:
+                need_metrics = True
 
-        # Full: вся история стадий. Incremental: только по сделкам, обновлённым в этом прогоне —
-        # иначе ЗЗ не двигается (first_zz строится из stage events, а инкремент их раньше пропускал).
+        # История стадий → ЗЗ: по изменённым сделкам + хвост очереди, если за раз слишком много.
         if mode == "full" and not skip_history:
             stats["stage_events"] = sync_deal_stage_history(client, deal_ids=None)
             stats["first_zz"] = rebuild_first_zz(deal_ids=None)
-        elif mode == "incremental":
-            if changed_deal_ids:
-                stats["stage_events"] = sync_deal_stage_history(client, deal_ids=changed_deal_ids)
-                stats["first_zz"] = rebuild_first_zz(deal_ids=changed_deal_ids)
+            _history_backlog_set([])
+            need_metrics = True
+        elif mode == "incremental" and not skip_history:
+            history_ids, backlog_left = _plan_history_deal_ids(changed_deal_ids)
+            stats["history_deal_ids"] = len(history_ids)
+            stats["history_backlog_left"] = backlog_left
+            if history_ids:
+                stats["stage_events"] = sync_deal_stage_history(client, deal_ids=history_ids)
+                stats["first_zz"] = rebuild_first_zz(deal_ids=history_ids)
+                need_metrics = True
             else:
                 stats["stage_events"] = 0
                 stats["first_zz"] = 0
@@ -226,8 +335,7 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
             stats["first_zz"] = 0
 
         if mode == "incremental":
-            # Если сделки не менялись — метрики не трогаем (веб не конкурирует с записью).
-            if changed_deal_ids:
+            if need_metrics:
                 metric_start = _changed_deals_metric_start(run_started_at)
                 stats["metric_start"] = metric_start.isoformat()
                 stats["daily_metrics"] = rebuild_manager_daily_metrics(start_date=metric_start)
@@ -235,7 +343,7 @@ def run_bitrix24_sync(mode: str = "incremental", skip_history: bool = False, sou
             else:
                 stats["daily_metrics"] = 0
                 stats["measurer_daily_metrics"] = 0
-                stats["metrics_skipped"] = "no_changed_deals"
+                stats["metrics_skipped"] = "no_changes"
         else:
             stats["daily_metrics"] = rebuild_manager_daily_metrics()
             stats["measurer_daily_metrics"] = rebuild_measurer_daily_metrics()
@@ -525,6 +633,52 @@ def reconcile_deleted_deals(client: BitrixClient) -> int:
         removed += len(chunk)
     if removed:
         logger.info("Reconciling deleted deals: removed %s local deals", removed)
+    return removed
+
+
+def reconcile_deleted_leads(client: BitrixClient) -> int:
+    """Полный список ID лидов Bitrix vs локальная БД."""
+    live_bitrix_ids: set[int] = set()
+    start = 0
+    while True:
+        commands = {
+            f"c_{i}": f"crm.lead.list?select[]=ID&order[ID]=ASC&start={start + i * 50}"
+            for i in range(50)
+        }
+        batch_res = client.batch(commands)
+        result_cmd = batch_res.get("result", {})
+
+        fetched_count = 0
+        last_reached = False
+        for i in range(50):
+            cmd_key = f"c_{i}"
+            items = result_cmd.get(cmd_key, [])
+            if not isinstance(items, list):
+                break
+            for raw in items:
+                if "ID" in raw:
+                    live_bitrix_ids.add(int(raw["ID"]))
+                    fetched_count += 1
+            if len(items) < 50:
+                last_reached = True
+                break
+
+        if last_reached or fetched_count == 0:
+            break
+        start += 2500
+
+    if not live_bitrix_ids:
+        return 0
+
+    local_ids = list(CrmLead.objects.values_list("bitrix_id", flat=True))
+    stale_ids = [bitrix_id for bitrix_id in local_ids if bitrix_id not in live_bitrix_ids]
+    removed = 0
+    for i in range(0, len(stale_ids), 500):
+        chunk = stale_ids[i : i + 500]
+        CrmLead.objects.filter(bitrix_id__in=chunk).delete()
+        removed += len(chunk)
+    if removed:
+        logger.info("Reconciling deleted leads: removed %s local leads", removed)
     return removed
 
 

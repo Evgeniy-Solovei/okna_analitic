@@ -136,10 +136,22 @@ LOGGING = {
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TIMEZONE = TIME_ZONE
+
+# Инкремент чаще = свежее данные; полный обход Bitrix не нужен — только DATE_MODIFY + куски delete-check.
+BITRIX24_SYNC = {
+    "INCREMENTAL_SECONDS": int(os.getenv("BITRIX24_INCREMENTAL_SECONDS", "300")),
+    "OVERLAP_MINUTES": int(os.getenv("BITRIX24_OVERLAP_MINUTES", "15")),
+    "RECONCILE_HOURS": float(os.getenv("BITRIX24_RECONCILE_HOURS", "6")),
+    "META_SYNC_HOURS": float(os.getenv("BITRIX24_META_SYNC_HOURS", "6")),
+    "HISTORY_BATCH_SIZE": int(os.getenv("BITRIX24_HISTORY_BATCH_SIZE", "200")),
+    # Кнопка «Обновить»: запас по DATE_MODIFY, чтобы подтянуть всё изменённое без полного обхода.
+    "FORCE_OVERLAP_HOURS": float(os.getenv("BITRIX24_FORCE_OVERLAP_HOURS", "24")),
+}
+
 CELERY_BEAT_SCHEDULE = {
-    "bitrix24-incremental-sync-every-10-minutes": {
+    "bitrix24-incremental-sync": {
         "task": "apps.analytics.tasks.sync_bitrix24_incremental",
-        "schedule": 10 * 60,
+        "schedule": BITRIX24_SYNC["INCREMENTAL_SECONDS"],
     },
 }
 

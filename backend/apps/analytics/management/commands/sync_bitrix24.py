@@ -10,13 +10,19 @@ class Command(BaseCommand):
         parser.add_argument("--full", action="store_true", help="Full sync: load all Bitrix24 data.")
         parser.add_argument("--incremental", action="store_true", help="Incremental sync: load records modified since last cursor.")
         parser.add_argument("--skip-history", action="store_true", help="Do not request deal stage history.")
+        parser.add_argument("--reconcile", action="store_true", help="Force delete reconcile (leads/deals missing in Bitrix).")
 
     def handle(self, *args, **options):
         if options["full"] and options["incremental"]:
             raise ValueError("Use either --full or --incremental, not both.")
 
         mode = "incremental" if options["incremental"] else "full"
-        stats = run_bitrix24_sync(mode=mode, skip_history=options["skip_history"], source="bitrix24")
+        stats = run_bitrix24_sync(
+            mode=mode,
+            skip_history=options["skip_history"],
+            source="bitrix24",
+            force_reconcile=options["reconcile"] or mode == "full",
+        )
         if stats.get("skipped"):
             self.stdout.write(self.style.WARNING(f"Sync skipped: {stats}"))
             return

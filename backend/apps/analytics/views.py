@@ -796,7 +796,7 @@ def dashboard_entry(request):
     if force_sync and can_force_sync(request.user):
         try:
             from .tasks import sync_bitrix24_incremental
-            sync_bitrix24_incremental.delay()
+            sync_bitrix24_incremental.delay(force_reconcile=True)
         except Exception:
             logger.exception("Failed to launch background sync task")
         return _redirect_without_force(request)
@@ -812,7 +812,7 @@ def measurers_dashboard_entry(request):
     if force_sync and can_force_sync(request.user):
         try:
             from .tasks import sync_bitrix24_incremental
-            sync_bitrix24_incremental.delay()
+            sync_bitrix24_incremental.delay(force_reconcile=True)
         except Exception:
             logger.exception("Failed to launch background sync task")
         return _redirect_without_force(request)
@@ -828,7 +828,7 @@ def refresh_status(request):
         return JsonResponse({"skipped": True, "reason": "forbidden"}, status=403)
     try:
         from .tasks import sync_bitrix24_incremental
-        sync_bitrix24_incremental.delay()
+        sync_bitrix24_incremental.delay(force_reconcile=True)
         return JsonResponse({"skipped": False, "status": "started", "message": "Фоновая синхронизация запущена"})
     except Exception:
         logger.exception("Failed to launch background sync via /refresh/")
